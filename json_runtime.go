@@ -177,15 +177,13 @@ func writePTJSONString(lw *lineWriter, s string) {
 
 func appendEscapedStringContent(lw *lineWriter, s string) {
 	const hex = "0123456789abcdef"
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if !jsonNeedsEscape[s[i]] {
-			continue
+	for len(s) > 0 {
+		idx := firstUnsafeIndex(s)
+		lw.buf = append(lw.buf, s[:idx]...)
+		if idx == len(s) {
+			break
 		}
-		if start < i {
-			lw.buf = append(lw.buf, s[start:i]...)
-		}
-		switch c := s[i]; c {
+		switch c := s[idx]; c {
 		case '\\', '"':
 			lw.buf = append(lw.buf, '\\', c)
 		case '\b':
@@ -201,10 +199,7 @@ func appendEscapedStringContent(lw *lineWriter, s string) {
 		default:
 			lw.buf = append(lw.buf, '\\', 'u', '0', '0', hex[c>>4], hex[c&0x0f])
 		}
-		start = i + 1
-	}
-	if start < len(s) {
-		lw.buf = append(lw.buf, s[start:]...)
+		s = s[idx+1:]
 	}
 }
 
