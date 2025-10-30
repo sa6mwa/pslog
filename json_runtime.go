@@ -9,7 +9,7 @@ import (
 
 var jsonNeedsEscape = func() [256]bool {
 	var table [256]bool
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		table[i] = true
 	}
 	table['"'] = true

@@ -89,7 +89,7 @@ func TestStringFromAnyFallbacks(t *testing.T) {
 }
 
 func TestArgKeyName(t *testing.T) {
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if want := "arg" + strconv.Itoa(i); argKeyName(i) != want {
 			t.Fatalf("unexpected arg key for %d", i)
 		}

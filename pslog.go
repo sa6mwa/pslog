@@ -352,8 +352,8 @@ func (w loggerWriter) Write(p []byte) (int, error) {
 	if w.logger == nil {
 		return len(p), nil
 	}
-	lines := bytes.Split(p, []byte{'\n'})
-	for _, line := range lines {
+	lines := bytes.SplitSeq(p, []byte{'\n'})
+	for line := range lines {
 		line = bytes.TrimRight(line, "\r")
 		trimmed := strings.TrimSpace(string(line))
 		if trimmed == "" {
@@ -377,8 +377,8 @@ func (w levelPinnedWriter) Write(p []byte) (int, error) {
 	if w.logger == nil {
 		return len(p), nil
 	}
-	lines := bytes.Split(p, []byte{'\n'})
-	for _, line := range lines {
+	lines := bytes.SplitSeq(p, []byte{'\n'})
+	for line := range lines {
 		line = bytes.TrimSpace(bytes.TrimSuffix(line, []byte{'\r'}))
 		if len(line) == 0 {
 			continue

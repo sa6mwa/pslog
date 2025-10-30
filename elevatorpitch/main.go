@@ -282,10 +282,7 @@ func renderLoop(ctx context.Context, metrics []*runnerMetrics, interval time.Dur
 	first := true
 	for {
 		now := time.Now()
-		elapsed := now.Sub(start)
-		if elapsed > duration {
-			elapsed = duration
-		}
+		elapsed := min(now.Sub(start), duration)
 		buf, lineCount := buildDisplay(metrics, elapsed, duration, maxLinesCap, false)
 		if first {
 			first = false
@@ -509,7 +506,7 @@ func renderBarCell(column, row, shift int, value, lower, upper uint64) string {
 		if gradientHorizontal {
 			var builder strings.Builder
 			builder.WriteString(left)
-			for j := 0; j < barWidth; j++ {
+			for j := range barWidth {
 				color := gradientColorAt(shift + j)
 				builder.WriteString(color)
 				builder.WriteString(glyphStr)
@@ -532,10 +529,7 @@ func blockGlyphForFraction(fraction float64) string {
 		return string(blockGlyphs[len(blockGlyphs)-1])
 	}
 	steps := float64(len(blockGlyphs))
-	index := int(math.Ceil(fraction*steps)) - 1
-	if index < 0 {
-		index = 0
-	}
+	index := max(int(math.Ceil(fraction*steps))-1, 0)
 	if index >= len(blockGlyphs) {
 		index = len(blockGlyphs) - 1
 	}

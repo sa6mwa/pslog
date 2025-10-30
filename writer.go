@@ -100,10 +100,7 @@ func (lw *lineWriter) reserve(n int) {
 	if need <= cap(lw.buf) {
 		return
 	}
-	newCap := cap(lw.buf)*2 + n
-	if newCap < need {
-		newCap = need
-	}
+	newCap := max(cap(lw.buf)*2+n, need)
 	if newCap > lineWriterMaxCap {
 		newCap = need
 	}
