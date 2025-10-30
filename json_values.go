@@ -93,11 +93,7 @@ func writeJSONStringPlain(w *lineWriter, s string) {
 func writeJSONValuePlain(w *lineWriter, value any) {
 	switch v := value.(type) {
 	case string:
-		if promoteTrustedValueString(v) {
-			writePTJSONStringTrusted(w, v)
-		} else {
-			writeJSONStringPlain(w, v)
-		}
+		writePTJSONString(w, v)
 	case TrustedString:
 		writePTJSONStringTrusted(w, string(v))
 	case stringer:
@@ -169,11 +165,7 @@ func writeJSONValueColored(w *lineWriter, value any, color string) {
 	}
 	switch v := value.(type) {
 	case string:
-		if promoteTrustedValueString(v) {
-			writePTJSONStringTrustedColored(w, color, v)
-		} else {
-			writePTJSONStringColored(w, color, v)
-		}
+		writePTJSONStringColored(w, color, v)
 	case TrustedString:
 		writePTJSONStringTrustedColored(w, color, string(v))
 	case stringer:

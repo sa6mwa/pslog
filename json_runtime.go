@@ -53,11 +53,7 @@ func writePTLogValue(lw *lineWriter, value any) {
 	case TrustedString:
 		writePTJSONStringTrusted(lw, string(v))
 	case string:
-		if promoteTrustedValueString(v) {
-			writePTJSONStringTrusted(lw, v)
-		} else {
-			writePTJSONString(lw, v)
-		}
+		writePTJSONString(lw, v)
 	case bool:
 		lw.writeBool(v)
 	case int:
@@ -110,11 +106,7 @@ func writePTLogValueColored(lw *lineWriter, value any, color string) {
 	case TrustedString:
 		writePTJSONStringTrustedColored(lw, color, string(v))
 	case string:
-		if promoteTrustedValueString(v) {
-			writePTJSONStringTrustedColored(lw, color, v)
-		} else {
-			writePTJSONStringColored(lw, color, v)
-		}
+		writePTJSONStringColored(lw, color, v)
 	case bool:
 		writeJSONBoolColored(lw, v, color)
 	case int:
@@ -167,11 +159,7 @@ func writePTLogArray(lw *lineWriter, values []any) {
 			writePTJSONStringTrusted(lw, string(vv))
 			continue
 		case string:
-			if promoteTrustedValueString(vv) {
-				writePTJSONStringTrusted(lw, vv)
-			} else {
-				writePTJSONString(lw, vv)
-			}
+			writePTJSONString(lw, vv)
 			continue
 		}
 		writeJSONValuePlain(lw, elem)
@@ -256,14 +244,6 @@ func writePTJSONStringTrustedColored(lw *lineWriter, color string, s string) {
 	lw.buf = append(lw.buf, '"')
 	lw.buf = append(lw.buf, reset...)
 	lw.maybeFlush()
-}
-
-func writePTJSONStringMaybeTrusted(lw *lineWriter, s string, trusted bool) {
-	if trusted {
-		writePTJSONStringTrusted(lw, s)
-		return
-	}
-	writePTJSONString(lw, s)
 }
 
 func writePTFieldPrefix(lw *lineWriter, first *bool, key string, trusted bool) {

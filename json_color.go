@@ -114,12 +114,7 @@ func (l *jsonColorLogger) writeLine(lw *lineWriter, level Level, msg string, tim
 	first = false
 	if msg != "" {
 		lw.buf = appendColoredKeyData(lw.buf, l.msgKeyData, first)
-		safe := promoteTrustedValueString(msg)
-		if safe {
-			writePTJSONStringTrustedColored(lw, ansi.Message, msg)
-		} else {
-			writeColoredJSONString(lw, msg, ansi.Message)
-		}
+		writeColoredJSONString(lw, msg, ansi.Message)
 	}
 	if len(l.basePayload) > 0 {
 		lw.writeBytes(l.basePayload)
@@ -201,25 +196,17 @@ func writeRuntimeJSONFieldsColor(lw *lineWriter, keyvals []any) {
 		return
 	}
 	first := false
-	pair := 0
-	for i := 0; i < len(keyvals); {
-		var key string
-		var value any
-		if i+1 < len(keyvals) {
-			key = keyFromValue(keyvals[i], pair)
-			value = keyvals[i+1]
-			i += 2
-		} else {
-			key = argKeyName(pair)
-			value = keyvals[i]
-			i++
-		}
-		pair++
+	for i := 0; i+1 < len(keyvals); i += 2 {
+		key, keyTrusted := extractKeyFast(keyvals[i])
 		if key == "" {
 			continue
 		}
-		trusted := promoteTrustedKey(key)
-		writeColoredField(lw, &first, key, value, jsonColorForValue(value), trusted)
+		value := keyvals[i+1]
+		writeColoredField(lw, &first, key, value, jsonColorForValue(value), keyTrusted)
+	}
+	if len(keyvals)%2 != 0 {
+		value := keyvals[len(keyvals)-1]
+		writeColoredField(lw, &first, argKeyName(len(keyvals)/2), value, jsonColorForValue(value), false)
 	}
 }
 

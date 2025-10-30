@@ -73,8 +73,7 @@ func (l *jsonPlainLogger) log(level Level, msg string, keyvals ...any) {
 	if l.base.cfg.includeTimestamp {
 		timestamp = l.base.cfg.timestamp()
 	}
-	msgTrusted := msg == "" || promoteTrustedValueString(msg)
-	l.writeLine(lw, level, msg, msgTrusted, timestamp, keyvals)
+	l.writeLine(lw, level, msg, timestamp, keyvals)
 	lw.finishLine()
 	lw.commit()
 	if l.lineHint != nil {
@@ -83,7 +82,7 @@ func (l *jsonPlainLogger) log(level Level, msg string, keyvals ...any) {
 	releaseLineWriter(lw)
 }
 
-func (l *jsonPlainLogger) writeLine(lw *lineWriter, level Level, msg string, msgTrusted bool, timestamp string, keyvals []any) {
+func (l *jsonPlainLogger) writeLine(lw *lineWriter, level Level, msg string, timestamp string, keyvals []any) {
 	levelLabel := LevelString(level)
 	estimate := 2 + len(l.basePayload) + len(keyvals)*8 + len(l.lvlKeyData) + len(levelLabel)
 	if msg != "" {
@@ -108,7 +107,7 @@ func (l *jsonPlainLogger) writeLine(lw *lineWriter, level Level, msg string, msg
 	writePTJSONStringTrusted(lw, levelLabel)
 	if msg != "" {
 		lw.buf = appendKeyData(lw.buf, l.msgKeyData, false)
-		writePTJSONStringMaybeTrusted(lw, msg, msgTrusted)
+		writePTJSONString(lw, msg)
 	}
 	if len(l.basePayload) > 0 {
 		lw.writeBytes(l.basePayload)
@@ -219,9 +218,6 @@ func writeRuntimeJSONFieldsPlain(lw *lineWriter, keyvals []any) {
 		key, keyTrusted := extractKeyFast(keyvals[i])
 		if key == "" {
 			continue
-		}
-		if !keyTrusted && promoteTrustedKey(key) {
-			keyTrusted = true
 		}
 		writePTFieldPrefix(lw, &first, key, keyTrusted)
 		writePTLogValue(lw, keyvals[i+1])
