@@ -17,3 +17,4 @@ benchmark/sample-data
 benchmark/benchorder
 benchmark/cmd/benchorder/benchorder
 examples/examples
+examples/demo/demo

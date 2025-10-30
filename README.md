@@ -23,6 +23,8 @@ other loggers.
 - 🔗 **Bridges for the stdlib** – wrap any pslog logger with `LogLogger` to obtain a `*log.Logger`
   without sacrificing the fast path for structured logging.
 
+![demo](examples/demo/demo.gif)
+
 ## Installation
 
 ```bash
