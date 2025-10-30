@@ -303,14 +303,22 @@ func extractKeyFast(v any) (string, bool) {
 }
 
 func stringHasUnsafe(s string) bool {
-	if !utf8.ValidString(s) {
-		return true
-	}
-	for i := 0; i < len(s); i++ {
+	for i := 0; i < len(s); {
 		c := s[i]
-		if c < 0x20 || c == '"' || c == '\\' {
+		if c < 0x80 {
+			if c < 0x20 || c == '"' || c == '\\' {
+				return true
+			}
+			i++
+			continue
+		}
+		// DecodeRuneInString validates multi-byte sequences; a size of 1 with RuneError
+		// signals invalid UTF-8.
+		_, size := utf8.DecodeRuneInString(s[i:])
+		if size == 1 {
 			return true
 		}
+		i += size
 	}
 	return false
 }
