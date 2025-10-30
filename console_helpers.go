@@ -5,13 +5,7 @@ import (
 )
 
 func needsQuote(s string) bool {
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c < 0x20 || c > 0x7e || c == ' ' || c == '\\' || c == '"' {
-			return true
-		}
-	}
-	return false
+	return firstConsoleUnsafeIndex(s) != len(s)
 }
 
 func strconvAppendInt(buf []byte, value int64) []byte {

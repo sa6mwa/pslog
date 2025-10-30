@@ -15,6 +15,81 @@ TEXT ·firstUnsafeIndexAsm(SB), NOSPLIT, $0-24
 	MOVQ $0x5c5c5c5c5c5c5c5c, DI
 
 chunk_loop:
+	CMPQ CX, $16
+	JL   chunk8
+
+	MOVQ (SI), DX
+	MOVQ DX, R8
+	ANDQ R13, R8
+	JNE  chunk_has_unsafe
+
+	MOVQ DX, R9
+	SUBQ R14, R9
+	MOVQ DX, R10
+	NOTQ R10
+	ANDQ R9, R10
+	ANDQ R13, R10
+	JNE  chunk_has_unsafe
+
+	MOVQ DX, R11
+	XORQ BX, R11
+	MOVQ R11, R12
+	SUBQ R15, R11
+	NOTQ R12
+	ANDQ R11, R12
+	ANDQ R13, R12
+	JNE  chunk_has_unsafe
+
+	MOVQ DX, R11
+	XORQ DI, R11
+	MOVQ R11, R12
+	SUBQ R15, R11
+	NOTQ R12
+	ANDQ R11, R12
+	ANDQ R13, R12
+	JNE  chunk_has_unsafe
+
+	ADDQ $8, SI
+	ADDQ $8, AX
+	SUBQ $8, CX
+
+	MOVQ (SI), DX
+	MOVQ DX, R8
+	ANDQ R13, R8
+	JNE  chunk_has_unsafe
+
+	MOVQ DX, R9
+	SUBQ R14, R9
+	MOVQ DX, R10
+	NOTQ R10
+	ANDQ R9, R10
+	ANDQ R13, R10
+	JNE  chunk_has_unsafe
+
+	MOVQ DX, R11
+	XORQ BX, R11
+	MOVQ R11, R12
+	SUBQ R15, R11
+	NOTQ R12
+	ANDQ R11, R12
+	ANDQ R13, R12
+	JNE  chunk_has_unsafe
+
+	MOVQ DX, R11
+	XORQ DI, R11
+	MOVQ R11, R12
+	SUBQ R15, R11
+	NOTQ R12
+	ANDQ R11, R12
+	ANDQ R13, R12
+	JNE  chunk_has_unsafe
+
+	ADDQ $8, SI
+	ADDQ $8, AX
+	SUBQ $8, CX
+	JMP  chunk_loop
+
+chunk8:
 	CMPQ CX, $8
 	JL   tail_loop
 
