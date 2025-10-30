@@ -136,6 +136,14 @@ func parseProductionLine(line string) (productionEntry, error) {
 	if lvl, ok := raw["lvl"].(string); ok {
 		if parsed, ok := pslog.ParseLevel(lvl); ok {
 			level = parsed
+			// Promote TRACE → DEBUG and DEBUG → INFO so that benchmarks remain comparable
+			// for loggers without fine-grained levels.
+			switch level {
+			case pslog.TraceLevel:
+				level = pslog.DebugLevel
+			case pslog.DebugLevel:
+				level = pslog.InfoLevel
+			}
 		}
 	}
 	delete(raw, "lvl")

@@ -30,7 +30,7 @@ const (
 	initialBlockSize      = uint64(5000)
 	maxChartRows          = 20
 	barCell               = "████"
-	columnWidth           = 14
+	columnWidth           = 16
 	pslogJSONColumn       = 2
 	barWidth              = 7
 	axisWidth             = 8

@@ -227,7 +227,11 @@ func runNativeLoggerBenchmarks(b *testing.B, cfg nativeBenchConfig) {
 			sink.setTee(nil)
 
 			if *nativeBenchLogFiles {
-				file, err := os.Create(filename)
+				if err := os.MkdirAll("logs", 0o755); err != nil {
+					b.Fatalf("create logs directory: %v", err)
+				}
+				path := fmt.Sprintf("logs/%s", filename)
+				file, err := os.Create(path)
 				if err != nil {
 					b.Fatalf("create log file: %v", err)
 				}
@@ -259,6 +263,7 @@ func nativeLoggers() []nativeLogger {
 					Mode:       pslog.ModeConsole,
 					NoColor:    true,
 					TimeFormat: time.RFC3339,
+					MinLevel:   pslog.TraceLevel,
 				}
 				logger := pslog.NewWithOptions(sink, opts)
 				b.ReportAllocs()
@@ -277,6 +282,7 @@ func nativeLoggers() []nativeLogger {
 					Mode:       pslog.ModeConsole,
 					ForceColor: true,
 					TimeFormat: time.RFC3339,
+					MinLevel:   pslog.TraceLevel,
 				}
 				logger := pslog.NewWithOptions(sink, opts)
 				b.ReportAllocs()
@@ -294,6 +300,7 @@ func nativeLoggers() []nativeLogger {
 				opts := pslog.Options{
 					Mode:       pslog.ModeStructured,
 					TimeFormat: time.RFC3339,
+					MinLevel:   pslog.TraceLevel,
 				}
 				logger := pslog.NewWithOptions(sink, opts)
 				b.ReportAllocs()
@@ -312,6 +319,7 @@ func nativeLoggers() []nativeLogger {
 					Mode:       pslog.ModeStructured,
 					TimeFormat: time.RFC3339,
 					ForceColor: true,
+					MinLevel:   pslog.TraceLevel,
 				}
 				logger := pslog.NewWithOptions(sink, opts)
 				b.ReportAllocs()
