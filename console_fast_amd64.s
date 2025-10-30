@@ -188,7 +188,7 @@ chunk_has_unsafe:
 	TESTQ CX, CX
 	JE   done
 
- tail_iter:
+tail_iter:
 	MOVBQZX (SI), R15
 	CMPB  R15, $0x80
 	JAE   found
@@ -198,6 +198,8 @@ chunk_has_unsafe:
 	JE    found
 	CMPB  R15, $0x5c
 	JE    found
+	CMPB  R15, $0x7f
+	JAE   found
 
 	INCQ SI
 	INCQ AX

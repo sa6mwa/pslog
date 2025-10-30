@@ -281,7 +281,7 @@ func stringHasUnsafe(s string) bool {
 	for i := 0; i < len(s); {
 		c := s[i]
 		if c < 0x80 {
-			if c < 0x20 || c == '"' || c == '\\' {
+			if c < 0x20 || c == 0x7f || c == '"' || c == '\\' {
 				return true
 			}
 			i++

@@ -75,3 +75,37 @@ func TestConsoleColorMatchesPlain(t *testing.T) {
 		t.Fatalf("color output mismatch after stripping ansi:\nplain=%s\ncolor=%s\nstripped=%s", plainLine, colorLine, stripped)
 	}
 }
+
+func TestConsoleQuotingDelAndHighBit(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		sub   string
+	}{
+		{"del", "has\x7fdel", "value=\"has\\x7fdel\""},
+		{"highbit", string([]byte{'h', 'i', 0x80, 'g', 'h'}), "value=\"hi\\x80gh\""},
+	}
+
+	for _, tc := range cases {
+		var plainBuf, colorBuf bytes.Buffer
+		plain := pslog.NewWithOptions(&plainBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true})
+		color := pslog.NewWithOptions(&colorBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, ForceColor: true})
+
+		plain.Info("event", "value", tc.value)
+		color.Info("event", "value", tc.value)
+
+		plainLine := strings.TrimSpace(plainBuf.String())
+		if !strings.Contains(plainLine, tc.sub) {
+			t.Fatalf("%s plain output missing %q: %q", tc.name, tc.sub, plainLine)
+		}
+
+		colorLine := colorBuf.String()
+		if !strings.Contains(colorLine, "\x1b") {
+			t.Fatalf("%s color output missing ansi: %q", tc.name, colorLine)
+		}
+		stripped := stripANSI(colorLine)
+		if !strings.Contains(stripped, tc.sub) {
+			t.Fatalf("%s color output missing %q after strip: %q", tc.name, tc.sub, stripped)
+		}
+	}
+}

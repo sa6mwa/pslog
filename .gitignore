@@ -1,4 +1,5 @@
 /testdata
+/.testbin
 /.gocache
 \#*\#
 .vscode/
