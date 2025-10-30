@@ -1,7 +1,7 @@
 #include "textflag.h"
 
-// func firstConsoleUnsafeIndexAsm(s string) int
-TEXT ·firstConsoleUnsafeIndexAsm(SB), NOSPLIT, $0-24
+// func firstConsoleUnsafeIndexSSE(s string) int
+TEXT ·firstConsoleUnsafeIndexSSE(SB), NOSPLIT, $0-24
 	MOVQ s_base+0(FP), SI
 	MOVQ s_len+8(FP), CX
 	XORQ AX, AX

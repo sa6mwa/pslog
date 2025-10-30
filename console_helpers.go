@@ -1,8 +1,6 @@
 package pslog
 
-import (
-	"strconv"
-)
+import "strconv"
 
 func needsQuote(s string) bool {
 	return firstConsoleUnsafeIndex(s) != len(s)

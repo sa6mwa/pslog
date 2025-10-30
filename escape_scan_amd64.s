@@ -1,7 +1,7 @@
 #include "textflag.h"
 
-// func firstUnsafeIndexAsm(s string) int
-TEXT ·firstUnsafeIndexAsm(SB), NOSPLIT, $0-24
+// func firstUnsafeIndexSSE(s string) int
+TEXT ·firstUnsafeIndexSSE(SB), NOSPLIT, $0-24
 	MOVQ s_base+0(FP), SI      // pointer to data
 	MOVQ s_len+8(FP), CX       // remaining length
 	XORQ AX, AX                // offset/result
