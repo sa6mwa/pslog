@@ -1,7 +1,7 @@
 #include "textflag.h"
 
-// func firstUnsafeIndexAsm(s string) int
-TEXT ·firstUnsafeIndexAsm(SB), NOSPLIT, $0-24
+// func firstConsoleUnsafeIndexAsm(s string) int
+TEXT ·firstConsoleUnsafeIndexAsm(SB), NOSPLIT, $0-24
 	MOVD s_base+0(FP), R0    // pointer
 	MOVD s_len+8(FP), R1     // remaining
 	MOVD ZR, R2              // offset/result
@@ -12,6 +12,8 @@ TEXT ·firstUnsafeIndexAsm(SB), NOSPLIT, $0-24
 	MOVD $0x0101010101010101, R10 // repeatOnes
 	MOVD $0x2222222222222222, R11 // jsonQuoteMask
 	MOVD $0x5c5c5c5c5c5c5c5c, R12 // jsonBackslashMask
+	MOVD $0x2020202020202020, R13 // consoleSpaceMask
+	MOVD $0x7f7f7f7f7f7f7f7f, R14 // consoleDelMask
 
 chunk_loop:
 	CMP  $16, R1
@@ -37,6 +39,18 @@ chunk_loop:
 	AND  R5, R6, R5
 	AND  R8, R5, R5
 	CBNZ R5, chunk_has_unsafe
+	EOR  R13, R3, R4
+	SUB  R10, R4, R5
+	MVN  R4, R6
+	AND  R5, R6, R5
+	AND  R8, R5, R5
+	CBNZ R5, chunk_has_unsafe
+	EOR  R14, R3, R4
+	SUB  R10, R4, R5
+	MVN  R4, R6
+	AND  R5, R6, R5
+	AND  R8, R5, R5
+	CBNZ R5, chunk_has_unsafe
 
 	MOVD 8(R0), R3
 	AND  R8, R3, R4
@@ -53,6 +67,18 @@ chunk_loop:
 	AND  R8, R5, R5
 	CBNZ R5, chunk_has_unsafe
 	EOR  R12, R3, R4
+	SUB  R10, R4, R5
+	MVN  R4, R6
+	AND  R5, R6, R5
+	AND  R8, R5, R5
+	CBNZ R5, chunk_has_unsafe
+	EOR  R13, R3, R4
+	SUB  R10, R4, R5
+	MVN  R4, R6
+	AND  R5, R6, R5
+	AND  R8, R5, R5
+	CBNZ R5, chunk_has_unsafe
+	EOR  R14, R3, R4
 	SUB  R10, R4, R5
 	MVN  R4, R6
 	AND  R5, R6, R5
@@ -88,6 +114,18 @@ chunk8:
 	AND  R5, R6, R5
 	AND  R8, R5, R5
 	CBNZ R5, chunk_has_unsafe
+	EOR  R13, R3, R4
+	SUB  R10, R4, R5
+	MVN  R4, R6
+	AND  R5, R6, R5
+	AND  R8, R5, R5
+	CBNZ R5, chunk_has_unsafe
+	EOR  R14, R3, R4
+	SUB  R10, R4, R5
+	MVN  R4, R6
+	AND  R5, R6, R5
+	AND  R8, R5, R5
+	CBNZ R5, chunk_has_unsafe
 
 	ADD  $8, R0
 	ADD  $8, R2
@@ -100,26 +138,19 @@ chunk_has_unsafe:
  tail_loop:
 	CBZ  R1, done
 
-tail_iter:
+ tail_iter:
 	MOVBU (R0), R3
 	CMP   $0x80, R3
-	BHS   tail_safe
+	BHS   found
 	CMP   $0x20, R3
-	BLO   found
+	BLS   found
 	CMP   $0x22, R3
 	BEQ   found
 	CMP   $0x5c, R3
 	BEQ   found
+	CMP   $0x7f, R3
+	BHS   found
 
-	ADD   $1, R0
-	ADD   $1, R2
-	SUB   $1, R1
-	CMP   $8, R1
-	BGE   chunk8
-	CBNZ  R1, tail_iter
-	B     done
-
-tail_safe:
 	ADD   $1, R0
 	ADD   $1, R2
 	SUB   $1, R1

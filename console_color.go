@@ -433,14 +433,10 @@ func appendConsoleValueColor(buf []byte, value any) []byte {
 }
 
 func appendConsoleStringColor(buf []byte, value string, color string) []byte {
-	buf = append(buf, color...)
-	if needsQuote(value) {
-		buf = strconvAppendQuoted(buf, value)
-	} else {
-		buf = append(buf, value...)
-	}
-	buf = append(buf, ansi.Reset...)
-	return buf
+    buf = append(buf, color...)
+    buf = appendConsoleStringInline(buf, value)
+    buf = append(buf, ansi.Reset...)
+    return buf
 }
 
 func appendColoredLiteral(buf []byte, literal string, color string) []byte {

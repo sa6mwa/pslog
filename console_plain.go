@@ -375,8 +375,5 @@ func appendConsoleValuePlain(buf []byte, value any) []byte {
 }
 
 func appendConsoleStringPlain(buf []byte, value string) []byte {
-	if needsQuote(value) {
-		return strconvAppendQuoted(buf, value)
-	}
-	return append(buf, value...)
+    return appendConsoleStringInline(buf, value)
 }

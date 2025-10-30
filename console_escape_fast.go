@@ -1,18 +1,10 @@
+//go:build !arm64
+
 package pslog
 
 import (
 	"encoding/binary"
 	"unsafe"
-)
-
-const (
-	asciiHighBitsMask    = 0x8080808080808080
-	repeatOnes           = 0x0101010101010101
-	jsonControlThreshold = 0x2020202020202020
-	jsonQuoteMask        = 0x2222222222222222
-	jsonBackslashMask    = 0x5c5c5c5c5c5c5c5c
-	consoleSpaceMask     = 0x2020202020202020
-	consoleDelMask       = 0x7f7f7f7f7f7f7f7f
 )
 
 func firstConsoleUnsafeIndex(s string) int {
@@ -24,7 +16,7 @@ func firstConsoleUnsafeIndex(s string) int {
 	i := 0
 	for i+8 <= n {
 		chunk := binary.LittleEndian.Uint64(bytes[i:])
-		if consoleChunkHasUnsafe(chunk) {
+		if chunkHasConsoleUnsafe(chunk) {
 			for j := 0; j < 8; j++ {
 				if consoleByteUnsafe(bytes[i+j]) {
 					return i + j
@@ -42,23 +34,7 @@ func firstConsoleUnsafeIndex(s string) int {
 }
 
 func consoleChunkHasUnsafe(chunk uint64) bool {
-	if chunk&asciiHighBitsMask != 0 {
-		return true
-	}
-	control := (chunk - jsonControlThreshold) & ^chunk & asciiHighBitsMask
-	if control != 0 {
-		return true
-	}
-	if chunkHasByte(chunk, jsonQuoteMask) || chunkHasByte(chunk, jsonBackslashMask) ||
-		chunkHasByte(chunk, consoleSpaceMask) || chunkHasByte(chunk, consoleDelMask) {
-		return true
-	}
-	return false
-}
-
-func chunkHasByte(chunk, target uint64) bool {
-	x := chunk ^ target
-	return (x-repeatOnes)&^x&asciiHighBitsMask != 0
+	return chunkHasConsoleUnsafe(chunk)
 }
 
 func consoleByteUnsafe(b byte) bool {

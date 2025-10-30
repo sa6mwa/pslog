@@ -3,8 +3,8 @@
 package pslog
 
 func firstUnsafeIndex(s string) int {
-	if len(s) < 32 {
-		return firstUnsafeIndexSmall(s)
+	if len(s) == 0 {
+		return 0
 	}
 	return firstUnsafeIndexAsm(s)
 }
