@@ -3,11 +3,8 @@
 package pslog
 
 func firstUnsafeIndex(s string) int {
-    if len(s) == 0 {
-        return 0
-    }
-    return firstUnsafeIndexAsm(s)
+	if len(s) == 0 {
+		return 0
+	}
+	return firstUnsafeIndexSmall(s)
 }
-
-//go:noescape
-func firstUnsafeIndexAsm(s string) int
