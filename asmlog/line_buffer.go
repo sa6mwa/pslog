@@ -1,8 +1,6 @@
 package asmlog
 
-import (
-	"strconv"
-)
+import "strconv"
 
 type lineBuffer struct {
 	buf []byte
@@ -31,7 +29,7 @@ func (b *lineBuffer) writeString(s string) {
 }
 
 func (b *lineBuffer) appendQuoted(s string) {
-	b.buf = strconv.AppendQuote(b.buf, s)
+	b.buf = appendJSONString(b.buf, s)
 }
 
 func (b *lineBuffer) appendBool(v bool) {
