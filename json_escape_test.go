@@ -10,6 +10,7 @@ func TestWritePTJSONStringMatchesEncodingJSON(t *testing.T) {
 	cases := []string{
 		"value",
 		"value\x7fhere",
+		"\x1b",
 		"line\nbreak",
 		"quote\"needed",
 	}
