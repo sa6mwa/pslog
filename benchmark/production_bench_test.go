@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	pslog "pkt.systems/pslog"
+	"pkt.systems/pslog/asmlog"
 )
 
 const productionDatasetLimit = 2048
@@ -60,6 +61,25 @@ func BenchmarkPSLogProduction(b *testing.B) {
 	run("pslog/production/jsoncolor", pslog.Options{Mode: pslog.ModeStructured, ForceColor: true})
 	run("pslog/production/console", pslog.Options{Mode: pslog.ModeConsole, NoColor: true})
 	run("pslog/production/consolecolor", pslog.Options{Mode: pslog.ModeConsole, ForceColor: true})
+
+	runBase := func(name string, factory func() pslog.Base) {
+		b.Run(name, func(b *testing.B) {
+			sink.resetCount()
+			logger := factory()
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				entry := entries[i%len(entries)]
+				logEntryWithBase(logger, entry)
+			}
+			if sink.bytesWritten() == 0 {
+				b.Fatalf("%s wrote zero bytes", name)
+			}
+			reportBytesPerOp(b, sink)
+		})
+	}
+
+	runBase("asmlog/production/json", func() pslog.Base { return asmlog.New(sink) })
 
 	zerologJSON := func() zerolog.Logger {
 		return zerolog.New(sink).With().Timestamp().Logger().Level(zerolog.TraceLevel)
@@ -174,6 +194,23 @@ func loadProductionEntries() []productionEntry {
 		panic(productionLoadErr)
 	}
 	return productionEntries
+}
+
+func logEntryWithBase(logger pslog.Base, entry productionEntry) {
+	switch entry.level {
+	case pslog.TraceLevel:
+		logger.Trace(entry.message, entry.keyvals...)
+	case pslog.DebugLevel:
+		logger.Debug(entry.message, entry.keyvals...)
+	case pslog.InfoLevel:
+		logger.Info(entry.message, entry.keyvals...)
+	case pslog.WarnLevel:
+		logger.Warn(entry.message, entry.keyvals...)
+	case pslog.ErrorLevel:
+		logger.Error(entry.message, entry.keyvals...)
+	default:
+		logger.Info(entry.message, entry.keyvals...)
+	}
 }
 
 func parseProductionDataset(limit int) ([]productionEntry, error) {
