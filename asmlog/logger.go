@@ -1,10 +1,8 @@
 package asmlog
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"strconv"
 	"sync"
 	"time"
 
@@ -33,7 +31,7 @@ func New(dst io.Writer) *Logger {
 		dst:       dst,
 		timeCache: tc,
 		bufPool: sync.Pool{
-			New: func() any { return &bytes.Buffer{} },
+			New: func() any { return newLineBuffer() },
 		},
 	}
 	return logger
@@ -58,53 +56,52 @@ func (l *Logger) log(level pslog.Level, msg string, keyvals ...any) {
 	buf := l.acquireBuffer()
 	defer l.releaseBuffer(buf)
 
-	buf.Reset()
-	buf.WriteByte('{')
+	buf.reset()
+	buf.writeByte('{')
 	l.appendField(buf, "ts", l.timeCache.Current(), true)
 	l.appendField(buf, "lvl", pslog.LevelString(level), false)
 	l.appendField(buf, "msg", msg, false)
 	l.appendKeyvals(buf, keyvals)
-	buf.WriteByte('}')
-	buf.WriteByte('\n')
+	buf.writeByte('}')
+	buf.writeByte('\n')
 
 	l.mu.Lock()
-	_, _ = l.dst.Write(buf.Bytes())
+	_, _ = l.dst.Write(buf.bytes())
 	l.mu.Unlock()
 }
 
-func (l *Logger) appendField(buf *bytes.Buffer, key, value string, first bool) {
+func (l *Logger) appendField(buf *lineBuffer, key, value string, first bool) {
 	if !first {
-		buf.WriteByte(',')
+		buf.writeByte(',')
 	}
-	buf.WriteString(strconv.Quote(key))
-	buf.WriteByte(':')
-	buf.WriteString(strconv.Quote(value))
+	buf.appendQuoted(key)
+	buf.writeByte(':')
+	buf.appendQuoted(value)
 }
 
-func (l *Logger) appendKeyvals(buf *bytes.Buffer, keyvals []any) {
+func (l *Logger) appendKeyvals(buf *lineBuffer, keyvals []any) {
 	count := len(keyvals)
 	for i := 0; i+1 < count; i += 2 {
 		key := stringifyKey(keyvals[i])
-		buf.WriteByte(',')
-		buf.WriteString(strconv.Quote(key))
-		buf.WriteByte(':')
+		buf.writeByte(',')
+		buf.appendQuoted(key)
+		buf.writeByte(':')
 		appendValue(buf, keyvals[i+1])
 	}
 	if count%2 == 1 {
 		argKey := fmt.Sprintf("arg%d", count/2)
-		buf.WriteByte(',')
-		buf.WriteString(strconv.Quote(argKey))
-		buf.WriteByte(':')
+		buf.writeByte(',')
+		buf.appendQuoted(argKey)
+		buf.writeByte(':')
 		appendValue(buf, keyvals[count-1])
 	}
 }
 
-func (l *Logger) acquireBuffer() *bytes.Buffer {
-	buf := l.bufPool.Get().(*bytes.Buffer)
-	return buf
+func (l *Logger) acquireBuffer() *lineBuffer {
+	return l.bufPool.Get().(*lineBuffer)
 }
 
-func (l *Logger) releaseBuffer(buf *bytes.Buffer) {
+func (l *Logger) releaseBuffer(buf *lineBuffer) {
 	l.bufPool.Put(buf)
 }
 
@@ -119,50 +116,5 @@ func stringifyKey(key any) string {
 		return k.String()
 	default:
 		return fmt.Sprint(k)
-	}
-}
-
-func appendValue(buf *bytes.Buffer, value any) {
-	switch v := value.(type) {
-	case string:
-		buf.WriteString(strconv.Quote(v))
-	case bool:
-		buf.WriteString(strconv.FormatBool(v))
-	case int:
-		buf.WriteString(strconv.FormatInt(int64(v), 10))
-	case int8:
-		buf.WriteString(strconv.FormatInt(int64(v), 10))
-	case int16:
-		buf.WriteString(strconv.FormatInt(int64(v), 10))
-	case int32:
-		buf.WriteString(strconv.FormatInt(int64(v), 10))
-	case int64:
-		buf.WriteString(strconv.FormatInt(v, 10))
-	case uint:
-		buf.WriteString(strconv.FormatUint(uint64(v), 10))
-	case uint8:
-		buf.WriteString(strconv.FormatUint(uint64(v), 10))
-	case uint16:
-		buf.WriteString(strconv.FormatUint(uint64(v), 10))
-	case uint32:
-		buf.WriteString(strconv.FormatUint(uint64(v), 10))
-	case uint64:
-		buf.WriteString(strconv.FormatUint(v, 10))
-	case float32:
-		buf.WriteString(strconv.FormatFloat(float64(v), 'f', -1, 32))
-	case float64:
-		buf.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
-	case time.Duration:
-		buf.WriteString(strconv.Quote(v.String()))
-	case time.Time:
-		buf.WriteString(strconv.Quote(v.UTC().Format(time.RFC3339Nano)))
-	case error:
-		buf.WriteString(strconv.Quote(v.Error()))
-	case fmt.Stringer:
-		buf.WriteString(strconv.Quote(v.String()))
-	case []byte:
-		buf.WriteString(strconv.Quote(string(v)))
-	default:
-		buf.WriteString(strconv.Quote(fmt.Sprint(v)))
 	}
 }
