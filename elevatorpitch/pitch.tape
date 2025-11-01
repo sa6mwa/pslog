@@ -1,7 +1,7 @@
 Output elevatorpitch.gif
-Set Width 780
-Set Height 620
-Set FontSize 14
+Set Width 686
+Set Height 518
+Set FontSize 11
 Set Margin 4
 Set Padding 10
 Set MarginFill "#674EFF"

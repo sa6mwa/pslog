@@ -6,8 +6,17 @@ system that can be customised at runtime.
 
 ![Elevator pitch](elevatorpitch/elevatorpitch.gif)
 
-The repository includes an animated “elevatorpitch” TUI that continuously benchmarks pslog alongside
-other loggers.
+> ⚠️ **Benchmark notice (v0.1–v0.2):** Earlier charts overstated pslog's JSON
+> throughput. While iterating on performance with an AI assistant, the benchmark
+> loader incorrectly marked every string in the dataset as a
+> `pslog.TrustedString`. That bypassed the JSON escape logic and made pslog
+> appear dramatically faster than phuslu/zerolog, even though real-world input
+> would still incur escape costs. The graph above is representative; phuslu is
+> currently the fastest logger, and pslog split second place with zerolog when
+> both execute their full escape paths. The `perfwork` branch now keeps the
+> dataset untrusted by default, logs cycles/op alongside ns/op, and stores every
+> run in `benchmark/results/pslog_json_perf.csv` preventing regressions like
+> this.
 
 ## Highlights
 
