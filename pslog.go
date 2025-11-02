@@ -155,7 +155,8 @@ func LevelFromEnv(key string) (Level, bool) {
 	return ParseLevel(value)
 }
 
-// DTGTimeFormat matches the legacy DTG layout used by the console logger.
+// DTGTimeFormat is the default Date Time Group format (DDHHMM) for the console
+// logger.
 var DTGTimeFormat = "021504"
 
 // Options controls how the pslog adapter formats and filters output.
@@ -278,6 +279,23 @@ func buildAdapter(w io.Writer, opts Options) Logger {
 	if includeTimestamp && isCacheableLayout(timeFormat) {
 		cache = newTimeCache(timeFormat, useUTC, formatter)
 	}
+	timestampTrusted := false
+	if includeTimestamp {
+		sample := time.Date(2024, time.January, 2, 15, 4, 5, 0, time.UTC)
+		if !useUTC {
+			sample = sample.Local()
+		}
+		var formatted string
+		switch {
+		case cache != nil:
+			formatted = cache.formatTime(sample)
+		case formatter != nil:
+			formatted = formatter(sample)
+		default:
+			formatted = sample.Format(timeFormat)
+		}
+		timestampTrusted = promoteTrustedValueString(formatted)
+	}
 	disableColor := opts.NoColor || os.Getenv("NO_COLOR") != ""
 	colorEnabled := !disableColor && (opts.ForceColor || isTerminal(w))
 
@@ -290,18 +308,19 @@ func buildAdapter(w io.Writer, opts Options) Logger {
 		timeCache:        cache,
 		timeFormatter:    formatter,
 		logLevelValue:    LevelString(minLevel),
+		timestampTrusted: timestampTrusted,
 	}
 
 	if mode == ModeStructured {
 		if colorEnabled {
-			return newJSONColorLogger(cfg, opts.VerboseFields)
+			return newJSONColorLogger(cfg, opts)
 		}
-		return newJSONPlainLogger(cfg, opts.VerboseFields)
+		return newJSONPlainLogger(cfg, opts)
 	}
 	if colorEnabled {
-		return newConsoleColorLogger(cfg)
+		return newConsoleColorLogger(cfg, opts)
 	}
-	return newConsolePlainLogger(cfg)
+	return newConsolePlainLogger(cfg, opts)
 }
 
 func classifyLineLevel(line string) (Level, string) {

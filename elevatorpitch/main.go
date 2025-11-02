@@ -36,7 +36,7 @@ const (
 	barWidth              = 7
 	axisWidth             = 8
 	performanceLogName    = "performance.log"
-	maxLines              = 13_000_000
+	maxLines              = 14_000_000
 )
 
 var (
@@ -112,7 +112,7 @@ func main() {
 
 	loggerOrder = []string{"zerolog", "phuslu", pslogJSONName, pslogJSONColorName, "zap"}
 
-	runners := buildRunners(pslogJSONName, pslogJSONColorName)
+	runners := buildRunners(entries, pslogJSONName, pslogJSONColorName)
 	recordRequested := *recordFlag
 	replayRequested := *replayFlag
 
@@ -158,7 +158,13 @@ func main() {
 	}
 }
 
-func buildRunners(pslogJSONName, pslogJSONColorName string) []runner {
+func buildRunners(entries []productionEntry, pslogJSONName, pslogJSONColorName string) []runner {
+	withArgs, staticKeys := productionStaticWithArgs(entries)
+	dynamicEntries := entries
+	if len(staticKeys) > 0 {
+		dynamicEntries = productionEntriesWithout(entries, staticKeys)
+	}
+
 	return []runner{
 		{
 			name: "zerolog",
@@ -215,7 +221,11 @@ func buildRunners(pslogJSONName, pslogJSONColorName string) []runner {
 					TimeFormat: time.RFC3339,
 				}
 				logger := pslog.NewWithOptions(writer, opts)
-				replayEntries(ctx, entries, metrics, func(entry productionEntry) {
+				activeEntries := dynamicEntries
+				if len(withArgs) > 0 {
+					logger = logger.With(withArgs...)
+				}
+				replayEntries(ctx, activeEntries, metrics, func(entry productionEntry) {
 					entry.logPslog(logger)
 				})
 			},
@@ -231,7 +241,11 @@ func buildRunners(pslogJSONName, pslogJSONColorName string) []runner {
 					TimeFormat: time.RFC3339,
 				}
 				logger := pslog.NewWithOptions(writer, opts)
-				replayEntries(ctx, entries, metrics, func(entry productionEntry) {
+				activeEntries := dynamicEntries
+				if len(withArgs) > 0 {
+					logger = logger.With(withArgs...)
+				}
+				replayEntries(ctx, activeEntries, metrics, func(entry productionEntry) {
 					entry.logPslog(logger)
 				})
 			},

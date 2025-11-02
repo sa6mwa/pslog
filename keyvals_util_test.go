@@ -95,3 +95,38 @@ func TestArgKeyName(t *testing.T) {
 		}
 	}
 }
+
+func TestKeyvalsPromotesTrustedKeys(t *testing.T) {
+	payload := Keyvals(
+		"ascii", "value",
+		"needs\nescape", "value2",
+		testStringer{"key"}, "stringer-value",
+		[]byte("bin"), "bytes",
+		123, "number",
+		TrustedString("already"), "trusted",
+	)
+
+	if _, ok := payload[0].(TrustedString); !ok {
+		t.Fatalf("expected ascii key to be promoted to TrustedString: %#v", payload[0])
+	}
+	if _, ok := payload[2].(TrustedString); ok {
+		t.Fatalf("expected newline key to remain plain string")
+	}
+	if keyStr, ok := payload[4].(TrustedString); !ok || string(keyStr) != "key" {
+		t.Fatalf("stringer key mismatch: %q", keyStr)
+	}
+	if keyStr, ok := payload[6].(TrustedString); !ok || string(keyStr) != "bin" {
+		t.Fatalf("expected []byte key to be trusted 'bin', got %#v", payload[6])
+	}
+	if keyStr, ok := payload[8].(TrustedString); !ok || string(keyStr) != "123" {
+		t.Fatalf("numeric key should be trusted string '123', got %#v", payload[8])
+	}
+	if keyStr, ok := payload[10].(TrustedString); !ok || string(keyStr) != "already" {
+		t.Fatalf("TrustedString should be preserved, got %#v", payload[10])
+	}
+	// Uneven final value should be kept as-is for readability (arg name will be generated later).
+	lone := Keyvals("orphan")
+	if len(lone) != 1 || lone[0] != "orphan" {
+		t.Fatalf("unexpected result for single argument: %#v", lone)
+	}
+}

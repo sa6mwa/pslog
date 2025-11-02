@@ -168,11 +168,7 @@ func parseProductionLine(line string) (productionEntry, error) {
 	zapFields := make([]zap.Field, 0, len(keys))
 	for _, k := range keys {
 		value := sanitizeJSONValue(raw[k])
-		if trusted, ok := pslog.NewTrustedString(k); ok {
-			keyvals = append(keyvals, trusted, value)
-		} else {
-			keyvals = append(keyvals, k, value)
-		}
+		keyvals = append(keyvals, k, value)
 		fields = append(fields, productionKV{key: k, value: value})
 		zapFields = append(zapFields, zapFieldFromValue(k, value))
 	}
@@ -212,9 +208,6 @@ func sanitizeJSONValue(v any) any {
 		}
 		return out
 	case string:
-		if trusted, ok := pslog.NewTrustedString(val); ok {
-			return trusted
-		}
 		return val
 	default:
 		return val

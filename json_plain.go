@@ -5,33 +5,58 @@ import (
 	"sync/atomic"
 )
 
+type jsonPlainEmitFunc func(l *jsonPlainLogger, lw *lineWriter, level Level, msg string, keyvals []any)
+
 type jsonPlainLogger struct {
-	base         loggerBase
-	tsKeyData    []byte
-	lvlKeyData   []byte
-	msgKeyData   []byte
-	basePayload  []byte
-	logLevelKey  []byte
-	lineHint     *atomic.Int64
-	verboseField bool
+	base           loggerBase
+	tsKeyData      []byte
+	lvlKeyData     []byte
+	msgKeyData     []byte
+	basePayload    []byte
+	hasBasePayload bool
+	logLevelKey    []byte
+	lineHint       *atomic.Int64
+	verboseField   bool
+	emit           jsonPlainEmitFunc
 }
 
-func newJSONPlainLogger(cfg coreConfig, verbose bool) *jsonPlainLogger {
+func appendKeyDataWithFirst(lw *lineWriter, first *bool, keyData []byte) {
+	if *first {
+		*first = false
+		if len(keyData) > 0 && keyData[0] == ',' {
+			lw.buf = append(lw.buf, keyData[1:]...)
+			return
+		}
+	}
+	lw.buf = append(lw.buf, keyData...)
+}
+
+func writeJSONStringField(lw *lineWriter, first *bool, keyData []byte, value string, trusted bool) {
+	appendKeyDataWithFirst(lw, first, keyData)
+	if trusted {
+		writePTJSONStringTrusted(lw, value)
+		return
+	}
+	writePTJSONString(lw, value)
+}
+
+func newJSONPlainLogger(cfg coreConfig, opts Options) *jsonPlainLogger {
 	tsKey := "ts"
 	lvlKey := "lvl"
 	msgKey := "msg"
-	if verbose {
+	if opts.VerboseFields {
 		tsKey = "time"
 		lvlKey = "level"
 		msgKey = "message"
 	}
+	configureJSONEscapeFromOptions(opts)
 	logger := &jsonPlainLogger{
 		base:         newLoggerBase(cfg, nil),
 		tsKeyData:    makeKeyData(tsKey, false),
 		lvlKeyData:   makeKeyData(lvlKey, true),
 		msgKeyData:   makeKeyData(msgKey, true),
 		logLevelKey:  makeKeyData("loglevel", true),
-		verboseField: verbose,
+		verboseField: opts.VerboseFields,
 		lineHint:     new(atomic.Int64),
 	}
 	logger.rebuildBasePayload()
@@ -69,56 +94,13 @@ func (l *jsonPlainLogger) log(level Level, msg string, keyvals ...any) {
 			lw.preallocate(int(hint))
 		}
 	}
-	timestamp := ""
-	if l.base.cfg.includeTimestamp {
-		timestamp = l.base.cfg.timestamp()
-	}
-	msgTrusted := msg == "" || promoteTrustedValueString(msg)
-	l.writeLine(lw, level, msg, msgTrusted, timestamp, keyvals)
+	l.emit(l, lw, level, msg, keyvals)
 	lw.finishLine()
 	lw.commit()
 	if l.lineHint != nil {
 		l.lineHint.Store(int64(lw.lastLineLength()))
 	}
 	releaseLineWriter(lw)
-}
-
-func (l *jsonPlainLogger) writeLine(lw *lineWriter, level Level, msg string, msgTrusted bool, timestamp string, keyvals []any) {
-	levelLabel := LevelString(level)
-	estimate := 2 + len(l.basePayload) + len(keyvals)*8 + len(l.lvlKeyData) + len(levelLabel)
-	if msg != "" {
-		estimate += len(l.msgKeyData) + len(msg)
-	}
-	if l.base.cfg.includeTimestamp {
-		estimate += len(l.tsKeyData) + len(timestamp)
-	}
-	if l.base.cfg.includeLogLevel {
-		estimate += len(l.logLevelKey) + len(l.base.cfg.logLevelValue)
-	}
-	lw.reserve(estimate)
-
-	lw.writeByte('{')
-	first := true
-	if l.base.cfg.includeTimestamp {
-		lw.buf = appendKeyData(lw.buf, l.tsKeyData, first)
-		writePTJSONStringTrusted(lw, timestamp)
-		first = false
-	}
-	lw.buf = appendKeyData(lw.buf, l.lvlKeyData, first)
-	writePTJSONStringTrusted(lw, levelLabel)
-	if msg != "" {
-		lw.buf = appendKeyData(lw.buf, l.msgKeyData, false)
-		writePTJSONStringMaybeTrusted(lw, msg, msgTrusted)
-	}
-	if len(l.basePayload) > 0 {
-		lw.writeBytes(l.basePayload)
-	}
-	writeRuntimeJSONFieldsPlain(lw, keyvals)
-	if l.base.cfg.includeLogLevel {
-		lw.writeBytes(l.logLevelKey)
-		writePTJSONStringTrusted(lw, l.base.cfg.logLevelValue)
-	}
-	lw.writeByte('}')
 }
 
 func (l *jsonPlainLogger) With(keyvals ...any) Logger {
@@ -180,9 +162,208 @@ func (l *jsonPlainLogger) LogLevelFromEnv(key string) Logger {
 
 func (l *jsonPlainLogger) rebuildBasePayload() {
 	l.basePayload = encodeBaseJSONPlain(l.base.fields)
+	l.hasBasePayload = len(l.basePayload) > 0
 	if l.base.cfg.includeLogLevel {
 		l.base.cfg.logLevelValue = LevelString(l.base.cfg.currentLevel())
 	}
+	l.emit = selectJSONPlainEmit(l.base.cfg, l.hasBasePayload)
+}
+
+func selectJSONPlainEmit(cfg coreConfig, hasStaticFields bool) jsonPlainEmitFunc {
+	switch {
+	case cfg.includeTimestamp && cfg.includeLogLevel:
+		if hasStaticFields {
+			return emitJSONPlainTimestampLogLevelWithStaticFields
+		}
+		return emitJSONPlainTimestampLogLevelNoStaticFields
+	case cfg.includeTimestamp:
+		if hasStaticFields {
+			return emitJSONPlainTimestampWithStaticFields
+		}
+		return emitJSONPlainTimestampNoStaticFields
+	case cfg.includeLogLevel:
+		if hasStaticFields {
+			return emitJSONPlainLogLevelWithStaticFields
+		}
+		return emitJSONPlainLogLevelNoStaticFields
+	default:
+		if hasStaticFields {
+			return emitJSONPlainBaseWithStaticFields
+		}
+		return emitJSONPlainBaseNoStaticFields
+	}
+}
+
+func emitJSONPlainTimestampLogLevelWithStaticFields(l *jsonPlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelLabel := LevelString(level)
+	estimate := 2 + len(l.basePayload) + len(keyvals)*8 +
+		len(l.tsKeyData) + len(timestamp) +
+		len(l.lvlKeyData) + len(levelLabel) +
+		len(l.logLevelKey) + len(l.base.cfg.logLevelValue)
+	if msg != "" {
+		estimate += len(l.msgKeyData) + len(msg)
+	}
+	lw.reserve(estimate)
+	lw.writeByte('{')
+	first := true
+	writeJSONStringField(lw, &first, l.tsKeyData, timestamp, l.base.cfg.timestampTrusted)
+	writeJSONStringField(lw, &first, l.lvlKeyData, levelLabel, true)
+	if msg != "" {
+		writeJSONStringField(lw, &first, l.msgKeyData, msg, false)
+	}
+	lw.writeBytes(l.basePayload)
+	first = false
+	writeRuntimeJSONFieldsPlain(lw, &first, keyvals)
+	writeJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, true)
+	lw.writeByte('}')
+}
+
+func emitJSONPlainTimestampLogLevelNoStaticFields(l *jsonPlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelLabel := LevelString(level)
+	estimate := 2 + len(keyvals)*8 +
+		len(l.tsKeyData) + len(timestamp) +
+		len(l.lvlKeyData) + len(levelLabel) +
+		len(l.logLevelKey) + len(l.base.cfg.logLevelValue)
+	if msg != "" {
+		estimate += len(l.msgKeyData) + len(msg)
+	}
+	lw.reserve(estimate)
+	lw.writeByte('{')
+	first := true
+	writeJSONStringField(lw, &first, l.tsKeyData, timestamp, l.base.cfg.timestampTrusted)
+	writeJSONStringField(lw, &first, l.lvlKeyData, levelLabel, true)
+	if msg != "" {
+		writeJSONStringField(lw, &first, l.msgKeyData, msg, false)
+	}
+	writeRuntimeJSONFieldsPlain(lw, &first, keyvals)
+	writeJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, true)
+	lw.writeByte('}')
+}
+
+func emitJSONPlainTimestampWithStaticFields(l *jsonPlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelLabel := LevelString(level)
+	estimate := 2 + len(l.basePayload) + len(keyvals)*8 +
+		len(l.tsKeyData) + len(timestamp) +
+		len(l.lvlKeyData) + len(levelLabel)
+	if msg != "" {
+		estimate += len(l.msgKeyData) + len(msg)
+	}
+	lw.reserve(estimate)
+	lw.writeByte('{')
+	first := true
+	writeJSONStringField(lw, &first, l.tsKeyData, timestamp, l.base.cfg.timestampTrusted)
+	writeJSONStringField(lw, &first, l.lvlKeyData, levelLabel, true)
+	if msg != "" {
+		writeJSONStringField(lw, &first, l.msgKeyData, msg, false)
+	}
+	lw.writeBytes(l.basePayload)
+	first = false
+	writeRuntimeJSONFieldsPlain(lw, &first, keyvals)
+	lw.writeByte('}')
+}
+
+func emitJSONPlainTimestampNoStaticFields(l *jsonPlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelLabel := LevelString(level)
+	estimate := 2 + len(keyvals)*8 +
+		len(l.tsKeyData) + len(timestamp) +
+		len(l.lvlKeyData) + len(levelLabel)
+	if msg != "" {
+		estimate += len(l.msgKeyData) + len(msg)
+	}
+	lw.reserve(estimate)
+	lw.writeByte('{')
+	first := true
+	writeJSONStringField(lw, &first, l.tsKeyData, timestamp, l.base.cfg.timestampTrusted)
+	writeJSONStringField(lw, &first, l.lvlKeyData, levelLabel, true)
+	if msg != "" {
+		writeJSONStringField(lw, &first, l.msgKeyData, msg, false)
+	}
+	writeRuntimeJSONFieldsPlain(lw, &first, keyvals)
+	lw.writeByte('}')
+}
+
+func emitJSONPlainLogLevelWithStaticFields(l *jsonPlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelLabel := LevelString(level)
+	estimate := 2 + len(l.basePayload) + len(keyvals)*8 +
+		len(l.lvlKeyData) + len(levelLabel) +
+		len(l.logLevelKey) + len(l.base.cfg.logLevelValue)
+	if msg != "" {
+		estimate += len(l.msgKeyData) + len(msg)
+	}
+	lw.reserve(estimate)
+	lw.writeByte('{')
+	first := true
+	writeJSONStringField(lw, &first, l.lvlKeyData, levelLabel, true)
+	if msg != "" {
+		writeJSONStringField(lw, &first, l.msgKeyData, msg, false)
+	}
+	lw.writeBytes(l.basePayload)
+	first = false
+	writeRuntimeJSONFieldsPlain(lw, &first, keyvals)
+	writeJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, true)
+	lw.writeByte('}')
+}
+
+func emitJSONPlainLogLevelNoStaticFields(l *jsonPlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelLabel := LevelString(level)
+	estimate := 2 + len(keyvals)*8 +
+		len(l.lvlKeyData) + len(levelLabel) +
+		len(l.logLevelKey) + len(l.base.cfg.logLevelValue)
+	if msg != "" {
+		estimate += len(l.msgKeyData) + len(msg)
+	}
+	lw.reserve(estimate)
+	lw.writeByte('{')
+	first := true
+	writeJSONStringField(lw, &first, l.lvlKeyData, levelLabel, true)
+	if msg != "" {
+		writeJSONStringField(lw, &first, l.msgKeyData, msg, false)
+	}
+	writeRuntimeJSONFieldsPlain(lw, &first, keyvals)
+	writeJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, true)
+	lw.writeByte('}')
+}
+
+func emitJSONPlainBaseWithStaticFields(l *jsonPlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelLabel := LevelString(level)
+	estimate := 2 + len(l.basePayload) + len(keyvals)*8 +
+		len(l.lvlKeyData) + len(levelLabel)
+	if msg != "" {
+		estimate += len(l.msgKeyData) + len(msg)
+	}
+	lw.reserve(estimate)
+	lw.writeByte('{')
+	first := true
+	writeJSONStringField(lw, &first, l.lvlKeyData, levelLabel, true)
+	if msg != "" {
+		writeJSONStringField(lw, &first, l.msgKeyData, msg, false)
+	}
+	lw.writeBytes(l.basePayload)
+	first = false
+	writeRuntimeJSONFieldsPlain(lw, &first, keyvals)
+	lw.writeByte('}')
+}
+
+func emitJSONPlainBaseNoStaticFields(l *jsonPlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelLabel := LevelString(level)
+	estimate := 2 + len(keyvals)*8 +
+		len(l.lvlKeyData) + len(levelLabel)
+	if msg != "" {
+		estimate += len(l.msgKeyData) + len(msg)
+	}
+	lw.reserve(estimate)
+	lw.writeByte('{')
+	first := true
+	writeJSONStringField(lw, &first, l.lvlKeyData, levelLabel, true)
+	if msg != "" {
+		writeJSONStringField(lw, &first, l.msgKeyData, msg, false)
+	}
+	writeRuntimeJSONFieldsPlain(lw, &first, keyvals)
+	lw.writeByte('}')
 }
 
 func encodeBaseJSONPlain(fields []field) []byte {
@@ -198,7 +379,7 @@ func encodeBaseJSONPlain(fields []field) []byte {
 			buf = make([]byte, 0, len(fields)*24)
 		}
 		buf = append(buf, ',')
-		if promoteTrustedKey(f.key) {
+		if f.trustedKey {
 			buf = append(buf, '"')
 			buf = append(buf, f.key...)
 			buf = append(buf, '"', ':')
@@ -210,25 +391,125 @@ func encodeBaseJSONPlain(fields []field) []byte {
 	return buf
 }
 
-func writeRuntimeJSONFieldsPlain(lw *lineWriter, keyvals []any) {
-	if len(keyvals) == 0 {
+func writeRuntimeJSONFieldsPlain(lw *lineWriter, first *bool, keyvals []any) {
+	if writeRuntimeJSONFieldsPlainFast(lw, first, keyvals) {
 		return
 	}
-	first := false
-	for i := 0; i+1 < len(keyvals); i += 2 {
-		key, keyTrusted := extractKeyFast(keyvals[i])
+	writeRuntimeJSONFieldsPlainSlow(lw, first, keyvals)
+}
+
+func writeRuntimeJSONFieldsPlainFast(lw *lineWriter, first *bool, keyvals []any) bool {
+	n := len(keyvals)
+	if n == 0 {
+		return true
+	}
+	pairIndex := 0
+	for i := 0; i+1 < n; i += 2 {
+		var key string
+		var trusted bool
+		switch k := keyvals[i].(type) {
+		case TrustedString:
+			key = string(k)
+			trusted = true
+		case string:
+			key = k
+			trusted = stringTrustedASCII(key)
+		default:
+			return false
+		}
 		if key == "" {
+			pairIndex++
 			continue
 		}
-		if !keyTrusted && promoteTrustedKey(key) {
-			keyTrusted = true
+		if *first {
+			*first = false
+		} else {
+			lw.buf = append(lw.buf, ',')
 		}
-		writePTFieldPrefix(lw, &first, key, keyTrusted)
-		writePTLogValue(lw, keyvals[i+1])
+		if trusted {
+			lw.reserve(len(key) + 3)
+			lw.buf = append(lw.buf, '"')
+			lw.buf = append(lw.buf, key...)
+			lw.buf = append(lw.buf, '"', ':')
+		} else {
+			lw.reserve(len(key)*6 + 3)
+			lw.buf = append(lw.buf, '"')
+			appendEscapedStringContent(lw, key)
+			lw.buf = append(lw.buf, '"', ':')
+		}
+		value := keyvals[i+1]
+		if !writeRuntimeValuePlainInline(lw, value) {
+			if !writeRuntimeValuePlain(lw, value) {
+				writePTLogValue(lw, value)
+			}
+		}
+		pairIndex++
 	}
-	if len(keyvals)%2 != 0 {
-		writePTFieldPrefix(lw, &first, argKeyName(len(keyvals)/2), false)
-		writePTLogValue(lw, keyvals[len(keyvals)-1])
+	if n&1 == 1 {
+		writeRuntimeJSONOddPlain(lw, first, keyvals[n-1], pairIndex)
+	}
+	return true
+}
+
+func writeRuntimeJSONFieldsPlainSlow(lw *lineWriter, first *bool, keyvals []any) {
+	n := len(keyvals)
+	if n == 0 {
+		return
+	}
+
+	pairIndex := 0
+	if n >= 2 {
+		pairIndex = writeRuntimeJSONPairPlain(lw, first, keyvals[0], keyvals[1], pairIndex)
+		if n >= 4 {
+			pairIndex = writeRuntimeJSONPairPlain(lw, first, keyvals[2], keyvals[3], pairIndex)
+			for i := 4; i+1 < n; i += 2 {
+				pairIndex = writeRuntimeJSONPairPlain(lw, first, keyvals[i], keyvals[i+1], pairIndex)
+			}
+			if n&1 == 1 {
+				writeRuntimeJSONOddPlain(lw, first, keyvals[n-1], pairIndex)
+			}
+			return
+		}
+		if n == 3 {
+			writeRuntimeJSONOddPlain(lw, first, keyvals[2], pairIndex)
+		}
+		return
+	}
+
+	writeRuntimeJSONOddPlain(lw, first, keyvals[0], pairIndex)
+}
+
+func writeRuntimeJSONPairPlain(lw *lineWriter, first *bool, key any, value any, pairIndex int) int {
+	k, trusted := runtimeKeyFromValue(key, pairIndex)
+	if k != "" {
+		if *first {
+			*first = false
+		} else {
+			lw.buf = append(lw.buf, ',')
+		}
+		if trusted {
+			writeTrustedKeyColon(lw, k)
+		} else {
+			writePTJSONStringWithColon(lw, k)
+		}
+		if !writeRuntimeValuePlain(lw, value) {
+			writePTLogValue(lw, value)
+		}
+	}
+	return pairIndex + 1
+}
+
+func writeRuntimeJSONOddPlain(lw *lineWriter, first *bool, value any, pairIndex int) {
+	if *first {
+		*first = false
+	} else {
+		lw.buf = append(lw.buf, ',')
+	}
+	writePTJSONStringWithColon(lw, argKeyName(pairIndex))
+	if !writeRuntimeValuePlainInline(lw, value) {
+		if !writeRuntimeValuePlain(lw, value) {
+			writePTLogValue(lw, value)
+		}
 	}
 }
 
@@ -239,13 +520,6 @@ func appendJSONValuePlain(buf []byte, value any) []byte {
 	buf = append(buf, lw.buf...)
 	releaseLineWriter(lw)
 	return buf
-}
-
-func appendKeyData(dst []byte, keyData []byte, first bool) []byte {
-	if first && len(keyData) > 0 && keyData[0] == ',' {
-		return append(dst, keyData[1:]...)
-	}
-	return append(dst, keyData...)
 }
 
 func appendEscapedKey(dst []byte, key string) []byte {

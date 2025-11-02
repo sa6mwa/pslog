@@ -1,4 +1,5 @@
 /testdata
+/.testbin
 /.gocache
 \#*\#
 .vscode/
@@ -16,5 +17,6 @@ vendor/
 benchmark/sample-data
 benchmark/benchorder
 benchmark/cmd/benchorder/benchorder
+benchmark/results
 examples/examples
 examples/demo/demo

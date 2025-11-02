@@ -6,13 +6,18 @@ import (
 	"time"
 )
 
+type consolePlainEmitFunc func(*consolePlainLogger, *lineWriter, Level, string, []any)
+
 type consolePlainLogger struct {
-	base      loggerBase
-	baseBytes []byte
-	lineHint  *atomic.Int64
+	base         loggerBase
+	baseBytes    []byte
+	hasBaseBytes bool
+	lineHint     *atomic.Int64
+	emit         consolePlainEmitFunc
 }
 
-func newConsolePlainLogger(cfg coreConfig) *consolePlainLogger {
+func newConsolePlainLogger(cfg coreConfig, opts Options) *consolePlainLogger {
+	configureConsoleScannerFromOptions(opts)
 	logger := &consolePlainLogger{
 		base:     newLoggerBase(cfg, nil),
 		lineHint: new(atomic.Int64),
@@ -52,38 +57,7 @@ func (l *consolePlainLogger) log(level Level, msg string, keyvals ...any) {
 			lw.preallocate(int(hint))
 		}
 	}
-	timestamp := ""
-	if l.base.cfg.includeTimestamp {
-		timestamp = l.base.cfg.timestamp()
-	}
-	levelLabel := consoleLevelPlain(level)
-	estimate := len(levelLabel) + len(l.baseBytes) + len(keyvals)*16 + 4
-	if timestamp != "" {
-		estimate += len(timestamp) + 1
-	}
-	if msg != "" {
-		estimate += len(msg) + 1
-	}
-	if l.base.cfg.includeLogLevel {
-		estimate += len(" loglevel=") + len(l.base.cfg.logLevelValue)
-	}
-	lw.reserve(estimate)
-	if l.base.cfg.includeTimestamp {
-		writeConsoleTimestampPlain(lw, timestamp)
-		lw.writeByte(' ')
-	}
-	lw.writeString(levelLabel)
-	if msg != "" {
-		lw.writeByte(' ')
-		lw.writeString(msg)
-	}
-	if len(l.baseBytes) > 0 {
-		lw.writeBytes(l.baseBytes)
-	}
-	writeRuntimeConsolePlain(lw, keyvals)
-	if l.base.cfg.includeLogLevel {
-		writeConsoleFieldPlain(lw, "loglevel", l.base.cfg.logLevelValue)
-	}
+	l.emit(l, lw, level, msg, keyvals)
 	lw.finishLine()
 	lw.commit()
 	l.recordHint(lw.lastLineLength())
@@ -159,9 +133,11 @@ func (l *consolePlainLogger) LogLevelFromEnv(key string) Logger {
 
 func (l *consolePlainLogger) rebuildBaseBytes() {
 	l.baseBytes = encodeConsoleFieldsPlain(l.base.fields)
+	l.hasBaseBytes = len(l.baseBytes) > 0
 	if l.base.cfg.includeLogLevel {
 		l.base.cfg.logLevelValue = LevelString(l.base.cfg.currentLevel())
 	}
+	l.emit = selectConsolePlainEmit(l.base.cfg, l.hasBaseBytes)
 }
 
 func encodeConsoleFieldsPlain(fields []field) []byte {
@@ -182,24 +158,80 @@ func encodeConsoleFieldsPlain(fields []field) []byte {
 }
 
 func writeRuntimeConsolePlain(lw *lineWriter, keyvals []any) {
+	if writeRuntimeConsolePlainFast(lw, keyvals) {
+		return
+	}
+	writeRuntimeConsolePlainSlow(lw, keyvals)
+}
+
+func writeRuntimeConsolePlainFast(lw *lineWriter, keyvals []any) bool {
+	if len(keyvals) == 0 {
+		return true
+	}
+	pair := 0
+	for i := 0; i+1 < len(keyvals); i += 2 {
+		var key string
+		switch k := keyvals[i].(type) {
+		case TrustedString:
+			key = string(k)
+		case string:
+			key = k
+		default:
+			return false
+		}
+		if key == "" {
+			pair++
+			continue
+		}
+		lw.writeByte(' ')
+		lw.writeString(key)
+		lw.writeByte('=')
+		value := keyvals[i+1]
+		if !writeConsoleValueInline(lw, value) {
+			writeConsoleValuePlain(lw, value)
+		}
+		pair++
+	}
+	if len(keyvals)%2 != 0 {
+		lw.writeByte(' ')
+		lw.writeString(argKeyName(pair))
+		lw.writeByte('=')
+		value := keyvals[len(keyvals)-1]
+		if !writeConsoleValueInline(lw, value) {
+			writeConsoleValuePlain(lw, value)
+		}
+	}
+	return true
+}
+
+func writeRuntimeConsolePlainSlow(lw *lineWriter, keyvals []any) {
 	if len(keyvals) == 0 {
 		return
 	}
 	pair := 0
-	for i := 0; i < len(keyvals); {
-		var key string
-		var value any
-		if i+1 < len(keyvals) {
-			key = keyFromValue(keyvals[i], pair)
-			value = keyvals[i+1]
-			i += 2
-		} else {
-			key = argKeyName(pair)
-			value = keyvals[i]
-			i++
+	for i := 0; i+1 < len(keyvals); i += 2 {
+		key := keyFromValue(keyvals[i], pair)
+		if key == "" {
+			pair++
+			continue
+		}
+		lw.writeByte(' ')
+		lw.writeString(key)
+		lw.writeByte('=')
+		value := keyvals[i+1]
+		if !writeConsoleValueFast(lw, value) {
+			writeConsoleValuePlain(lw, value)
 		}
 		pair++
-		writeConsoleFieldPlain(lw, key, value)
+	}
+	if len(keyvals)%2 != 0 {
+		lw.writeByte(' ')
+		lw.writeString(argKeyName(pair))
+		lw.writeByte('=')
+		value := keyvals[len(keyvals)-1]
+		if !writeConsoleValueFast(lw, value) {
+			writeConsoleValuePlain(lw, value)
+		}
 	}
 }
 
@@ -215,6 +247,179 @@ func writeConsoleFieldPlain(lw *lineWriter, key string, value any) {
 
 func writeConsoleTimestampPlain(lw *lineWriter, ts string) {
 	lw.writeString(ts)
+}
+
+func selectConsolePlainEmit(cfg coreConfig, hasBaseFields bool) consolePlainEmitFunc {
+	switch {
+	case cfg.includeTimestamp && cfg.includeLogLevel:
+		if hasBaseFields {
+			return emitConsolePlainTimestampLogLevelWithBaseFields
+		}
+		return emitConsolePlainTimestampLogLevelNoBaseFields
+	case cfg.includeTimestamp:
+		if hasBaseFields {
+			return emitConsolePlainTimestampWithBaseFields
+		}
+		return emitConsolePlainTimestampNoBaseFields
+	case cfg.includeLogLevel:
+		if hasBaseFields {
+			return emitConsolePlainLogLevelWithBaseFields
+		}
+		return emitConsolePlainLogLevelNoBaseFields
+	default:
+		if hasBaseFields {
+			return emitConsolePlainBaseWithBaseFields
+		}
+		return emitConsolePlainBaseNoBaseFields
+	}
+}
+
+func emitConsolePlainTimestampLogLevelWithBaseFields(l *consolePlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelLabel := consoleLevelPlain(level)
+	estimate := len(levelLabel) + len(l.baseBytes) + len(keyvals)*16 + 4
+	estimate += len(timestamp) + 1
+	estimate += len(" loglevel=") + len(l.base.cfg.logLevelValue)
+	if msg != "" {
+		estimate += len(msg) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleTimestampPlain(lw, timestamp)
+	lw.writeByte(' ')
+	lw.writeString(levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		lw.writeString(msg)
+	}
+	lw.writeBytes(l.baseBytes)
+	writeRuntimeConsolePlain(lw, keyvals)
+	writeConsoleFieldPlain(lw, "loglevel", l.base.cfg.logLevelValue)
+}
+
+func emitConsolePlainTimestampLogLevelNoBaseFields(l *consolePlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelLabel := consoleLevelPlain(level)
+	estimate := len(levelLabel) + len(keyvals)*16 + 4
+	estimate += len(timestamp) + 1
+	estimate += len(" loglevel=") + len(l.base.cfg.logLevelValue)
+	if msg != "" {
+		estimate += len(msg) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleTimestampPlain(lw, timestamp)
+	lw.writeByte(' ')
+	lw.writeString(levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		lw.writeString(msg)
+	}
+	writeRuntimeConsolePlain(lw, keyvals)
+	writeConsoleFieldPlain(lw, "loglevel", l.base.cfg.logLevelValue)
+}
+
+func emitConsolePlainTimestampWithBaseFields(l *consolePlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelLabel := consoleLevelPlain(level)
+	estimate := len(levelLabel) + len(l.baseBytes) + len(keyvals)*16 + 4
+	estimate += len(timestamp) + 1
+	if msg != "" {
+		estimate += len(msg) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleTimestampPlain(lw, timestamp)
+	lw.writeByte(' ')
+	lw.writeString(levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		lw.writeString(msg)
+	}
+	lw.writeBytes(l.baseBytes)
+	writeRuntimeConsolePlain(lw, keyvals)
+}
+
+func emitConsolePlainTimestampNoBaseFields(l *consolePlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelLabel := consoleLevelPlain(level)
+	estimate := len(levelLabel) + len(keyvals)*16 + 4
+	estimate += len(timestamp) + 1
+	if msg != "" {
+		estimate += len(msg) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleTimestampPlain(lw, timestamp)
+	lw.writeByte(' ')
+	lw.writeString(levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		lw.writeString(msg)
+	}
+	writeRuntimeConsolePlain(lw, keyvals)
+}
+
+func emitConsolePlainLogLevelWithBaseFields(l *consolePlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelLabel := consoleLevelPlain(level)
+	estimate := len(levelLabel) + len(l.baseBytes) + len(keyvals)*16 + 4
+	estimate += len(" loglevel=") + len(l.base.cfg.logLevelValue)
+	if msg != "" {
+		estimate += len(msg) + 1
+	}
+	lw.reserve(estimate)
+	lw.writeString(levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		lw.writeString(msg)
+	}
+	lw.writeBytes(l.baseBytes)
+	writeRuntimeConsolePlain(lw, keyvals)
+	writeConsoleFieldPlain(lw, "loglevel", l.base.cfg.logLevelValue)
+}
+
+func emitConsolePlainLogLevelNoBaseFields(l *consolePlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelLabel := consoleLevelPlain(level)
+	estimate := len(levelLabel) + len(keyvals)*16 + 4
+	estimate += len(" loglevel=") + len(l.base.cfg.logLevelValue)
+	if msg != "" {
+		estimate += len(msg) + 1
+	}
+	lw.reserve(estimate)
+	lw.writeString(levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		lw.writeString(msg)
+	}
+	writeRuntimeConsolePlain(lw, keyvals)
+	writeConsoleFieldPlain(lw, "loglevel", l.base.cfg.logLevelValue)
+}
+
+func emitConsolePlainBaseWithBaseFields(l *consolePlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelLabel := consoleLevelPlain(level)
+	estimate := len(levelLabel) + len(l.baseBytes) + len(keyvals)*16 + 4
+	if msg != "" {
+		estimate += len(msg) + 1
+	}
+	lw.reserve(estimate)
+	lw.writeString(levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		lw.writeString(msg)
+	}
+	lw.writeBytes(l.baseBytes)
+	writeRuntimeConsolePlain(lw, keyvals)
+}
+
+func emitConsolePlainBaseNoBaseFields(l *consolePlainLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelLabel := consoleLevelPlain(level)
+	estimate := len(levelLabel) + len(keyvals)*16 + 4
+	if msg != "" {
+		estimate += len(msg) + 1
+	}
+	lw.reserve(estimate)
+	lw.writeString(levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		lw.writeString(msg)
+	}
+	writeRuntimeConsolePlain(lw, keyvals)
 }
 
 func consoleLevelPlain(level Level) string {
@@ -240,7 +445,152 @@ func consoleLevelPlain(level Level) string {
 	}
 }
 
+func writeConsoleValueFast(lw *lineWriter, value any) bool {
+	switch v := value.(type) {
+	case TrustedString:
+		writeConsoleStringPlain(lw, string(v))
+		return true
+	case string:
+		writeConsoleStringPlain(lw, v)
+		return true
+	case time.Time:
+		writeConsoleStringPlain(lw, lw.formatTimeRFC3339(v))
+		return true
+	case time.Duration:
+		writeConsoleStringPlain(lw, lw.formatDuration(v))
+		return true
+	case stringer:
+		writeConsoleStringPlain(lw, v.String())
+		return true
+	case error:
+		writeConsoleStringPlain(lw, v.Error())
+		return true
+	case bool:
+		writeConsoleBoolPlain(lw, v)
+		return true
+	case int:
+		writeConsoleIntPlain(lw, int64(v))
+		return true
+	case int8:
+		writeConsoleIntPlain(lw, int64(v))
+		return true
+	case int16:
+		writeConsoleIntPlain(lw, int64(v))
+		return true
+	case int32:
+		writeConsoleIntPlain(lw, int64(v))
+		return true
+	case int64:
+		writeConsoleIntPlain(lw, v)
+		return true
+	case uint:
+		writeConsoleUintPlain(lw, uint64(v))
+		return true
+	case uint8:
+		writeConsoleUintPlain(lw, uint64(v))
+		return true
+	case uint16:
+		writeConsoleUintPlain(lw, uint64(v))
+		return true
+	case uint32:
+		writeConsoleUintPlain(lw, uint64(v))
+		return true
+	case uint64:
+		writeConsoleUintPlain(lw, v)
+		return true
+	case uintptr:
+		writeConsoleUintPlain(lw, uint64(v))
+		return true
+	case float32:
+		writeConsoleFloatPlain(lw, float64(v))
+		return true
+	case float64:
+		writeConsoleFloatPlain(lw, v)
+		return true
+	case []byte:
+		writeConsoleStringPlain(lw, string(v))
+		return true
+	case nil:
+		writeConsoleStringPlain(lw, "nil")
+		return true
+	}
+	return false
+}
+
+func writeConsoleValueInline(lw *lineWriter, value any) bool {
+	switch v := value.(type) {
+	case TrustedString:
+		writeConsoleStringPlain(lw, string(v))
+		return true
+	case string:
+		writeConsoleStringPlain(lw, v)
+		return true
+	case bool:
+		writeConsoleBoolPlain(lw, v)
+		return true
+	case int:
+		writeConsoleIntPlain(lw, int64(v))
+		return true
+	case int8:
+		writeConsoleIntPlain(lw, int64(v))
+		return true
+	case int16:
+		writeConsoleIntPlain(lw, int64(v))
+		return true
+	case int32:
+		writeConsoleIntPlain(lw, int64(v))
+		return true
+	case int64:
+		writeConsoleIntPlain(lw, v)
+		return true
+	case uint:
+		writeConsoleUintPlain(lw, uint64(v))
+		return true
+	case uint8:
+		writeConsoleUintPlain(lw, uint64(v))
+		return true
+	case uint16:
+		writeConsoleUintPlain(lw, uint64(v))
+		return true
+	case uint32:
+		writeConsoleUintPlain(lw, uint64(v))
+		return true
+	case uint64:
+		writeConsoleUintPlain(lw, v)
+		return true
+	case uintptr:
+		writeConsoleUintPlain(lw, uint64(v))
+		return true
+	case float32:
+		writeConsoleFloatPlain(lw, float64(v))
+		return true
+	case float64:
+		writeConsoleFloatPlain(lw, v)
+		return true
+	case time.Time:
+		writeConsoleStringPlain(lw, lw.formatTimeRFC3339(v))
+		return true
+	case time.Duration:
+		writeConsoleStringPlain(lw, lw.formatDuration(v))
+		return true
+	case stringer:
+		writeConsoleStringPlain(lw, v.String())
+		return true
+	case error:
+		writeConsoleStringPlain(lw, v.Error())
+		return true
+	case []byte:
+		writeConsoleStringPlain(lw, string(v))
+		return true
+	case nil:
+		writeConsoleStringPlain(lw, "nil")
+		return true
+	}
+	return false
+}
+
 func writeConsoleValuePlain(lw *lineWriter, value any) {
+
 	switch v := value.(type) {
 	case string:
 		writeConsoleStringPlain(lw, v)
@@ -291,7 +641,7 @@ func writeConsoleValuePlain(lw *lineWriter, value any) {
 
 func writeConsoleStringPlain(lw *lineWriter, value string) {
 	if needsQuote(value) {
-		lw.writeQuotedString(value)
+		writeConsoleQuotedString(lw, value)
 		return
 	}
 	lw.writeString(value)
@@ -375,8 +725,5 @@ func appendConsoleValuePlain(buf []byte, value any) []byte {
 }
 
 func appendConsoleStringPlain(buf []byte, value string) []byte {
-	if needsQuote(value) {
-		return strconvAppendQuoted(buf, value)
-	}
-	return append(buf, value...)
+	return appendConsoleStringInline(buf, value)
 }

@@ -173,12 +173,6 @@ func (lw *lineWriter) writeFloat64(f float64) {
 	lw.maybeFlush()
 }
 
-func (lw *lineWriter) writeQuotedString(s string) {
-	lw.reserve(len(s) + 2)
-	lw.buf = strconv.AppendQuote(lw.buf, s)
-	lw.maybeFlush()
-}
-
 func (lw *lineWriter) lookupFloat(f float64) ([]byte, bool) {
 	bits := math.Float64bits(f)
 	for i := range lw.floatCache {

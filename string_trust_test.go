@@ -14,6 +14,8 @@ func TestStringHasUnsafe(t *testing.T) {
 		{"quote", "hello\"world", true},
 		{"backslash", "path\\name", true},
 		{"control", "line\nbreak", true},
+		{"del", string([]byte{0x7f}), true},
+		{"high-bit", string([]byte{0x80}), true},
 		{"invalid UTF-8", string([]byte{0xff, 0xfe}), true},
 	}
 	for _, tc := range cases {

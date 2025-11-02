@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -30,6 +31,17 @@ type productionKV struct {
 
 func (e productionEntry) logPslog(logger pslog.Logger) {
 	logger.Log(e.level, e.message, e.keyvals...)
+}
+
+func (e productionEntry) toMap() map[string]any {
+	if len(e.fields) == 0 {
+		return nil
+	}
+	m := make(map[string]any, len(e.fields))
+	for _, f := range e.fields {
+		m[f.key] = f.value
+	}
+	return m
 }
 
 func (e productionEntry) applyZerolog(ev *zerolog.Event) *zerolog.Event {
@@ -161,6 +173,108 @@ func parseProductionLine(line string) (productionEntry, error) {
 		fields:  fields,
 		zap:     zapFields,
 	}, nil
+}
+
+func normalizeStaticValue(value any) any {
+	switch v := value.(type) {
+	case string:
+		if trusted, ok := pslog.NewTrustedString(v); ok {
+			return trusted
+		}
+		return v
+	case pslog.TrustedString:
+		return v
+	default:
+		return value
+	}
+}
+
+func productionStaticWithArgs(entries []productionEntry) ([]any, map[string]struct{}) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	constants := entries[0].toMap()
+	for k := range constants {
+		constants[k] = normalizeStaticValue(constants[k])
+	}
+	for _, entry := range entries[1:] {
+		entryMap := entry.toMap()
+		for key, value := range constants {
+			other, ok := entryMap[key]
+			if !ok {
+				delete(constants, key)
+				continue
+			}
+			if !reflect.DeepEqual(normalizeStaticValue(other), value) {
+				delete(constants, key)
+			}
+		}
+		if len(constants) == 0 {
+			break
+		}
+	}
+	if len(constants) == 0 {
+		return nil, nil
+	}
+	keys := make([]string, 0, len(constants))
+	for k := range constants {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	withArgs := make([]any, 0, len(keys)*2)
+	staticKeys := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		staticKeys[key] = struct{}{}
+		withArgs = append(withArgs, key, constants[key])
+	}
+	if len(withArgs) > 0 {
+		withArgs = pslog.Keyvals(withArgs...)
+	}
+	return withArgs, staticKeys
+}
+
+func productionEntriesWithout(entries []productionEntry, staticKeys map[string]struct{}) []productionEntry {
+	if len(staticKeys) == 0 {
+		return entries
+	}
+	filtered := make([]productionEntry, len(entries))
+	for i, entry := range entries {
+		filteredEntry := entry
+		filteredEntry.keyvals = filterKeyvals(entry.keyvals, staticKeys)
+		filtered[i] = filteredEntry
+	}
+	return filtered
+}
+
+func filterKeyvals(keyvals []any, staticKeys map[string]struct{}) []any {
+	if len(keyvals) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(keyvals))
+	for i := 0; i < len(keyvals); {
+		if i+1 >= len(keyvals) {
+			out = append(out, keyvals[i:]...)
+			break
+		}
+		key := keyvals[i]
+		value := keyvals[i+1]
+		keyStr := ""
+		switch v := key.(type) {
+		case string:
+			keyStr = v
+		case pslog.TrustedString:
+			keyStr = string(v)
+		}
+		if keyStr != "" {
+			if _, exists := staticKeys[keyStr]; exists {
+				i += 2
+				continue
+			}
+		}
+		out = append(out, key, value)
+		i += 2
+	}
+	return out
 }
 
 func sanitizeJSONValue(v any) any {

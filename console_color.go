@@ -10,13 +10,18 @@ import (
 	"pkt.systems/pslog/ansi"
 )
 
+type consoleColorEmitFunc func(*consoleColorLogger, *lineWriter, Level, string, []any)
+
 type consoleColorLogger struct {
-	base      loggerBase
-	baseBytes []byte
-	lineHint  *atomic.Int64
+	base         loggerBase
+	baseBytes    []byte
+	hasBaseBytes bool
+	lineHint     *atomic.Int64
+	emit         consoleColorEmitFunc
 }
 
-func newConsoleColorLogger(cfg coreConfig) *consoleColorLogger {
+func newConsoleColorLogger(cfg coreConfig, opts Options) *consoleColorLogger {
+	configureConsoleScannerFromOptions(opts)
 	logger := &consoleColorLogger{
 		base:     newLoggerBase(cfg, nil),
 		lineHint: new(atomic.Int64),
@@ -86,38 +91,7 @@ func (l *consoleColorLogger) log(level Level, msg string, keyvals ...any) {
 			lw.preallocate(int(hint))
 		}
 	}
-	timestamp := ""
-	if l.base.cfg.includeTimestamp {
-		timestamp = l.base.cfg.timestamp()
-	}
-	levelColor, levelLabel := consoleLevelColor(level)
-	estimate := len(levelLabel) + len(levelColor) + len(ansi.Reset) + len(l.baseBytes) + len(keyvals)*20 + 4
-	if timestamp != "" {
-		estimate += len(ansi.Timestamp) + len(timestamp) + len(ansi.Reset) + 1
-	}
-	if msg != "" {
-		estimate += len(ansi.Message) + len(msg) + len(ansi.Reset) + 1
-	}
-	if l.base.cfg.includeLogLevel {
-		estimate += len(ansi.Key) + len("loglevel=") + len(ansi.Reset) + len(ansi.String) + len(l.base.cfg.logLevelValue) + len(ansi.Reset)
-	}
-	lw.reserve(estimate)
-	if l.base.cfg.includeTimestamp {
-		writeConsoleTimestampColor(lw, timestamp)
-		lw.writeByte(' ')
-	}
-	writeConsoleColoredLiteral(lw, levelColor, levelLabel)
-	if msg != "" {
-		lw.writeByte(' ')
-		writeConsoleMessageColor(lw, msg)
-	}
-	if len(l.baseBytes) > 0 {
-		lw.writeBytes(l.baseBytes)
-	}
-	writeRuntimeConsoleColor(lw, keyvals)
-	if l.base.cfg.includeLogLevel {
-		writeConsoleFieldColor(lw, "loglevel", l.base.cfg.logLevelValue)
-	}
+	l.emit(l, lw, level, msg, keyvals)
 	lw.finishLine()
 	lw.commit()
 	l.recordHint(lw.lastLineLength())
@@ -193,30 +167,80 @@ func (l *consoleColorLogger) LogLevelFromEnv(key string) Logger {
 
 func (l *consoleColorLogger) rebuildBaseBytes() {
 	l.baseBytes = encodeConsoleFieldsColor(l.base.fields)
+	l.hasBaseBytes = len(l.baseBytes) > 0
 	if l.base.cfg.includeLogLevel {
 		l.base.cfg.logLevelValue = LevelString(l.base.cfg.currentLevel())
 	}
+	l.emit = selectConsoleColorEmit(l.base.cfg, l.hasBaseBytes)
 }
 
 func writeRuntimeConsoleColor(lw *lineWriter, keyvals []any) {
+	if writeRuntimeConsoleColorFast(lw, keyvals) {
+		return
+	}
+	writeRuntimeConsoleColorSlow(lw, keyvals)
+}
+
+func writeRuntimeConsoleColorFast(lw *lineWriter, keyvals []any) bool {
+	if len(keyvals) == 0 {
+		return true
+	}
+	pair := 0
+	for i := 0; i+1 < len(keyvals); i += 2 {
+		var key string
+		switch k := keyvals[i].(type) {
+		case TrustedString:
+			key = string(k)
+		case string:
+			key = k
+		default:
+			return false
+		}
+		if key == "" {
+			pair++
+			continue
+		}
+		writeConsoleKeyColor(lw, key)
+		value := keyvals[i+1]
+		if !writeConsoleValueColorInline(lw, value) {
+			writeConsoleValueColor(lw, value)
+		}
+		pair++
+	}
+	if len(keyvals)%2 != 0 {
+		writeConsoleKeyColor(lw, argKeyName(pair))
+		value := keyvals[len(keyvals)-1]
+		if !writeConsoleValueColorInline(lw, value) {
+			writeConsoleValueColor(lw, value)
+		}
+	}
+	return true
+}
+
+func writeRuntimeConsoleColorSlow(lw *lineWriter, keyvals []any) {
 	if len(keyvals) == 0 {
 		return
 	}
 	pair := 0
-	for i := 0; i < len(keyvals); {
-		var key string
-		var value any
-		if i+1 < len(keyvals) {
-			key = keyFromValue(keyvals[i], pair)
-			value = keyvals[i+1]
-			i += 2
-		} else {
-			key = argKeyName(pair)
-			value = keyvals[i]
-			i++
+	for i := 0; i+1 < len(keyvals); i += 2 {
+		key := keyFromValue(keyvals[i], pair)
+		if key == "" {
+			pair++
+			continue
+		}
+		writeConsoleKeyColor(lw, key)
+		value := keyvals[i+1]
+		if !writeConsoleValueColorFast(lw, value) {
+			writeConsoleValueColor(lw, value)
 		}
 		pair++
-		writeConsoleFieldColor(lw, key, value)
+	}
+	if len(keyvals)%2 != 0 {
+		writeConsoleKeyColor(lw, argKeyName(pair))
+		value := keyvals[len(keyvals)-1]
+		if !writeConsoleValueColorFast(lw, value) {
+			writeConsoleValueColor(lw, value)
+		}
 	}
 }
 
@@ -247,6 +271,186 @@ func writeConsoleTimestampColor(lw *lineWriter, ts string) {
 	writeConsoleColoredLiteral(lw, ansi.Timestamp, ts)
 }
 
+func selectConsoleColorEmit(cfg coreConfig, hasBaseFields bool) consoleColorEmitFunc {
+	switch {
+	case cfg.includeTimestamp && cfg.includeLogLevel:
+		if hasBaseFields {
+			return emitConsoleColorTimestampLogLevelWithBaseFields
+		}
+		return emitConsoleColorTimestampLogLevelNoBaseFields
+	case cfg.includeTimestamp:
+		if hasBaseFields {
+			return emitConsoleColorTimestampWithBaseFields
+		}
+		return emitConsoleColorTimestampNoBaseFields
+	case cfg.includeLogLevel:
+		if hasBaseFields {
+			return emitConsoleColorLogLevelWithBaseFields
+		}
+		return emitConsoleColorLogLevelNoBaseFields
+	default:
+		if hasBaseFields {
+			return emitConsoleColorBaseWithBaseFields
+		}
+		return emitConsoleColorBaseNoBaseFields
+	}
+}
+
+func emitConsoleColorTimestampLogLevelWithBaseFields(l *consoleColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelColor, levelLabel := consoleLevelColor(level)
+	estimate := len(l.baseBytes) + len(keyvals)*20 + 4
+	estimate += len(levelLabel) + len(levelColor) + len(ansi.Reset)
+	estimate += len(ansi.Timestamp) + len(timestamp) + len(ansi.Reset) + 1
+	estimate += len(ansi.Key) + len("loglevel=") + len(ansi.Reset) + len(ansi.String) + len(l.base.cfg.logLevelValue) + len(ansi.Reset)
+	if msg != "" {
+		estimate += len(ansi.Message) + len(msg) + len(ansi.Reset) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleTimestampColor(lw, timestamp)
+	lw.writeByte(' ')
+	writeConsoleColoredLiteral(lw, levelColor, levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		writeConsoleMessageColor(lw, msg)
+	}
+	lw.writeBytes(l.baseBytes)
+	writeRuntimeConsoleColor(lw, keyvals)
+	writeConsoleFieldColor(lw, "loglevel", l.base.cfg.logLevelValue)
+}
+
+func emitConsoleColorTimestampLogLevelNoBaseFields(l *consoleColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelColor, levelLabel := consoleLevelColor(level)
+	estimate := len(keyvals)*20 + 4
+	estimate += len(levelLabel) + len(levelColor) + len(ansi.Reset)
+	estimate += len(ansi.Timestamp) + len(timestamp) + len(ansi.Reset) + 1
+	estimate += len(ansi.Key) + len("loglevel=") + len(ansi.Reset) + len(ansi.String) + len(l.base.cfg.logLevelValue) + len(ansi.Reset)
+	if msg != "" {
+		estimate += len(ansi.Message) + len(msg) + len(ansi.Reset) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleTimestampColor(lw, timestamp)
+	lw.writeByte(' ')
+	writeConsoleColoredLiteral(lw, levelColor, levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		writeConsoleMessageColor(lw, msg)
+	}
+	writeRuntimeConsoleColor(lw, keyvals)
+	writeConsoleFieldColor(lw, "loglevel", l.base.cfg.logLevelValue)
+}
+
+func emitConsoleColorTimestampWithBaseFields(l *consoleColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelColor, levelLabel := consoleLevelColor(level)
+	estimate := len(l.baseBytes) + len(keyvals)*20 + 4
+	estimate += len(levelLabel) + len(levelColor) + len(ansi.Reset)
+	estimate += len(ansi.Timestamp) + len(timestamp) + len(ansi.Reset) + 1
+	if msg != "" {
+		estimate += len(ansi.Message) + len(msg) + len(ansi.Reset) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleTimestampColor(lw, timestamp)
+	lw.writeByte(' ')
+	writeConsoleColoredLiteral(lw, levelColor, levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		writeConsoleMessageColor(lw, msg)
+	}
+	lw.writeBytes(l.baseBytes)
+	writeRuntimeConsoleColor(lw, keyvals)
+}
+
+func emitConsoleColorTimestampNoBaseFields(l *consoleColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	timestamp := l.base.cfg.timestamp()
+	levelColor, levelLabel := consoleLevelColor(level)
+	estimate := len(keyvals)*20 + 4
+	estimate += len(levelLabel) + len(levelColor) + len(ansi.Reset)
+	estimate += len(ansi.Timestamp) + len(timestamp) + len(ansi.Reset) + 1
+	if msg != "" {
+		estimate += len(ansi.Message) + len(msg) + len(ansi.Reset) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleTimestampColor(lw, timestamp)
+	lw.writeByte(' ')
+	writeConsoleColoredLiteral(lw, levelColor, levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		writeConsoleMessageColor(lw, msg)
+	}
+	writeRuntimeConsoleColor(lw, keyvals)
+}
+
+func emitConsoleColorLogLevelWithBaseFields(l *consoleColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelColor, levelLabel := consoleLevelColor(level)
+	estimate := len(l.baseBytes) + len(keyvals)*20 + 4
+	estimate += len(levelLabel) + len(levelColor) + len(ansi.Reset)
+	estimate += len(ansi.Key) + len("loglevel=") + len(ansi.Reset) + len(ansi.String) + len(l.base.cfg.logLevelValue) + len(ansi.Reset)
+	if msg != "" {
+		estimate += len(ansi.Message) + len(msg) + len(ansi.Reset) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleColoredLiteral(lw, levelColor, levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		writeConsoleMessageColor(lw, msg)
+	}
+	lw.writeBytes(l.baseBytes)
+	writeRuntimeConsoleColor(lw, keyvals)
+	writeConsoleFieldColor(lw, "loglevel", l.base.cfg.logLevelValue)
+}
+
+func emitConsoleColorLogLevelNoBaseFields(l *consoleColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelColor, levelLabel := consoleLevelColor(level)
+	estimate := len(keyvals)*20 + 4
+	estimate += len(levelLabel) + len(levelColor) + len(ansi.Reset)
+	estimate += len(ansi.Key) + len("loglevel=") + len(ansi.Reset) + len(ansi.String) + len(l.base.cfg.logLevelValue) + len(ansi.Reset)
+	if msg != "" {
+		estimate += len(ansi.Message) + len(msg) + len(ansi.Reset) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleColoredLiteral(lw, levelColor, levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		writeConsoleMessageColor(lw, msg)
+	}
+	writeRuntimeConsoleColor(lw, keyvals)
+	writeConsoleFieldColor(lw, "loglevel", l.base.cfg.logLevelValue)
+}
+
+func emitConsoleColorBaseWithBaseFields(l *consoleColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelColor, levelLabel := consoleLevelColor(level)
+	estimate := len(l.baseBytes) + len(keyvals)*20 + 4
+	estimate += len(levelLabel) + len(levelColor) + len(ansi.Reset)
+	if msg != "" {
+		estimate += len(ansi.Message) + len(msg) + len(ansi.Reset) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleColoredLiteral(lw, levelColor, levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		writeConsoleMessageColor(lw, msg)
+	}
+	lw.writeBytes(l.baseBytes)
+	writeRuntimeConsoleColor(lw, keyvals)
+}
+
+func emitConsoleColorBaseNoBaseFields(l *consoleColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
+	levelColor, levelLabel := consoleLevelColor(level)
+	estimate := len(keyvals)*20 + 4
+	estimate += len(levelLabel) + len(levelColor) + len(ansi.Reset)
+	if msg != "" {
+		estimate += len(ansi.Message) + len(msg) + len(ansi.Reset) + 1
+	}
+	lw.reserve(estimate)
+	writeConsoleColoredLiteral(lw, levelColor, levelLabel)
+	if msg != "" {
+		lw.writeByte(' ')
+		writeConsoleMessageColor(lw, msg)
+	}
+	writeRuntimeConsoleColor(lw, keyvals)
+}
 func consoleLevelColor(level Level) (string, string) {
 	switch level {
 	case TraceLevel:
@@ -274,7 +478,152 @@ func writeConsoleMessageColor(lw *lineWriter, msg string) {
 	writeConsoleColoredLiteral(lw, ansi.Message, msg)
 }
 
+func writeConsoleValueColorFast(lw *lineWriter, value any) bool {
+	switch v := value.(type) {
+	case TrustedString:
+		writeConsoleStringColor(lw, string(v), ansi.String)
+		return true
+	case string:
+		writeConsoleStringColor(lw, v, ansi.String)
+		return true
+	case time.Time:
+		writeConsoleStringColor(lw, lw.formatTimeRFC3339(v), ansi.Timestamp)
+		return true
+	case time.Duration:
+		writeConsoleStringColor(lw, lw.formatDuration(v), ansi.String)
+		return true
+	case stringer:
+		writeConsoleStringColor(lw, v.String(), ansi.String)
+		return true
+	case error:
+		writeConsoleStringColor(lw, v.Error(), ansi.Error)
+		return true
+	case bool:
+		writeConsoleBoolColor(lw, v)
+		return true
+	case int:
+		writeConsoleIntColor(lw, int64(v))
+		return true
+	case int8:
+		writeConsoleIntColor(lw, int64(v))
+		return true
+	case int16:
+		writeConsoleIntColor(lw, int64(v))
+		return true
+	case int32:
+		writeConsoleIntColor(lw, int64(v))
+		return true
+	case int64:
+		writeConsoleIntColor(lw, v)
+		return true
+	case uint:
+		writeConsoleUintColor(lw, uint64(v))
+		return true
+	case uint8:
+		writeConsoleUintColor(lw, uint64(v))
+		return true
+	case uint16:
+		writeConsoleUintColor(lw, uint64(v))
+		return true
+	case uint32:
+		writeConsoleUintColor(lw, uint64(v))
+		return true
+	case uint64:
+		writeConsoleUintColor(lw, v)
+		return true
+	case uintptr:
+		writeConsoleUintColor(lw, uint64(v))
+		return true
+	case float32:
+		writeConsoleFloatColor(lw, float64(v))
+		return true
+	case float64:
+		writeConsoleFloatColor(lw, v)
+		return true
+	case []byte:
+		writeConsoleStringColor(lw, string(v), ansi.String)
+		return true
+	case nil:
+		writeConsoleStringColor(lw, "nil", ansi.Nil)
+		return true
+	}
+	return false
+}
+
+func writeConsoleValueColorInline(lw *lineWriter, value any) bool {
+	switch v := value.(type) {
+	case TrustedString:
+		writeConsoleStringColor(lw, string(v), ansi.String)
+		return true
+	case string:
+		writeConsoleStringColor(lw, v, ansi.String)
+		return true
+	case bool:
+		writeConsoleBoolColor(lw, v)
+		return true
+	case int:
+		writeConsoleIntColor(lw, int64(v))
+		return true
+	case int8:
+		writeConsoleIntColor(lw, int64(v))
+		return true
+	case int16:
+		writeConsoleIntColor(lw, int64(v))
+		return true
+	case int32:
+		writeConsoleIntColor(lw, int64(v))
+		return true
+	case int64:
+		writeConsoleIntColor(lw, v)
+		return true
+	case uint:
+		writeConsoleUintColor(lw, uint64(v))
+		return true
+	case uint8:
+		writeConsoleUintColor(lw, uint64(v))
+		return true
+	case uint16:
+		writeConsoleUintColor(lw, uint64(v))
+		return true
+	case uint32:
+		writeConsoleUintColor(lw, uint64(v))
+		return true
+	case uint64:
+		writeConsoleUintColor(lw, v)
+		return true
+	case uintptr:
+		writeConsoleUintColor(lw, uint64(v))
+		return true
+	case float32:
+		writeConsoleFloatColor(lw, float64(v))
+		return true
+	case float64:
+		writeConsoleFloatColor(lw, v)
+		return true
+	case time.Time:
+		writeConsoleStringColor(lw, lw.formatTimeRFC3339(v), ansi.Timestamp)
+		return true
+	case time.Duration:
+		writeConsoleStringColor(lw, lw.formatDuration(v), ansi.String)
+		return true
+	case stringer:
+		writeConsoleStringColor(lw, v.String(), ansi.String)
+		return true
+	case error:
+		writeConsoleStringColor(lw, v.Error(), ansi.Error)
+		return true
+	case []byte:
+		writeConsoleStringColor(lw, string(v), ansi.String)
+		return true
+	case nil:
+		writeConsoleStringColor(lw, "nil", ansi.Nil)
+		return true
+	}
+	return false
+}
+
 func writeConsoleValueColor(lw *lineWriter, value any) {
+
 	switch v := value.(type) {
 	case string:
 		writeConsoleStringColor(lw, v, ansi.String)
@@ -328,10 +677,10 @@ func writeConsoleStringColor(lw *lineWriter, value string, color string) {
 		writeConsoleStringPlain(lw, value)
 		return
 	}
-	lw.reserve(len(color) + len(ansi.Reset) + len(value) + 2)
+	lw.reserve(len(color) + len(ansi.Reset) + len(value)*4 + 2)
 	lw.buf = append(lw.buf, color...)
 	if needsQuote(value) {
-		lw.writeQuotedString(value)
+		lw.buf = appendConsoleQuotedString(lw.buf, value)
 	} else {
 		lw.buf = append(lw.buf, value...)
 	}
@@ -434,11 +783,7 @@ func appendConsoleValueColor(buf []byte, value any) []byte {
 
 func appendConsoleStringColor(buf []byte, value string, color string) []byte {
 	buf = append(buf, color...)
-	if needsQuote(value) {
-		buf = strconvAppendQuoted(buf, value)
-	} else {
-		buf = append(buf, value...)
-	}
+	buf = appendConsoleStringInline(buf, value)
 	buf = append(buf, ansi.Reset...)
 	return buf
 }

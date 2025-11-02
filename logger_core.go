@@ -6,8 +6,9 @@ import (
 )
 
 type field struct {
-	key   string
-	value any
+	key        string
+	value      any
+	trustedKey bool
 }
 
 func collectFields(keyvals []any) []field {
@@ -18,14 +19,28 @@ func collectFields(keyvals []any) []field {
 	pair := 0
 	for i := 0; i < len(keyvals); {
 		if i+1 < len(keyvals) {
-			key := keyFromValue(keyvals[i], pair)
-			fields = append(fields, field{key: key, value: keyvals[i+1]})
+			var key string
+			var trusted bool
+			switch k := keyvals[i].(type) {
+			case TrustedString:
+				key = string(k)
+				trusted = true
+			case string:
+				key = k
+				trusted = stringTrustedASCII(key)
+			default:
+				key = keyFromValue(keyvals[i], pair)
+				if key != "" {
+					trusted = stringTrustedASCII(key)
+				}
+			}
+			fields = append(fields, field{key: key, value: keyvals[i+1], trustedKey: trusted})
 			i += 2
 			pair++
 			continue
 		}
 		key := argKeyName(pair)
-		fields = append(fields, field{key: key, value: keyvals[i]})
+		fields = append(fields, field{key: key, value: keyvals[i], trustedKey: stringTrustedASCII(key)})
 		i++
 		pair++
 	}
@@ -68,6 +83,7 @@ type coreConfig struct {
 	useUTC           bool
 	timeCache        *timeCache
 	timeFormatter    func(time.Time) string
+	timestampTrusted bool
 }
 
 func (c coreConfig) clone() coreConfig {

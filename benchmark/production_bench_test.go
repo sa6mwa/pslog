@@ -2,6 +2,8 @@ package benchmark_test
 
 import (
 	"errors"
+	"reflect"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -38,15 +40,35 @@ func BenchmarkPSLogProduction(b *testing.B) {
 		zerolog.TimestampFieldName = prevField
 	})
 
-	run := func(name string, opts pslog.Options) {
+	withArgs, staticKeySet := productionStaticWithArgs(entries)
+	if len(withArgs) > 0 {
+		withArgs = pslog.Keyvals(withArgs...)
+	}
+	dynamicEntries := entries
+	if len(staticKeySet) > 0 {
+		dynamicEntries = productionEntriesWithout(entries, staticKeySet)
+	}
+	keyvalsEntries := productionEntriesWithKeyvals(dynamicEntries)
+
+	run := func(name string, opts pslog.Options, useWith bool, useKeyvals bool) {
 		b.Run(name, func(b *testing.B) {
 			sink.resetCount()
 			opts.MinLevel = pslog.TraceLevel
 			logger := pslog.NewWithOptions(sink, opts)
+			activeEntries := entries
+			if useWith {
+				if len(withArgs) > 0 {
+					logger = logger.With(withArgs...)
+				}
+				activeEntries = dynamicEntries
+			}
+			if useKeyvals {
+				activeEntries = keyvalsEntries
+			}
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				entry := entries[i%len(entries)]
+				entry := activeEntries[i%len(activeEntries)]
 				entry.log(logger)
 			}
 			if sink.bytesWritten() == 0 {
@@ -56,10 +78,14 @@ func BenchmarkPSLogProduction(b *testing.B) {
 		})
 	}
 
-	run("pslog/production/json", pslog.Options{Mode: pslog.ModeStructured})
-	run("pslog/production/jsoncolor", pslog.Options{Mode: pslog.ModeStructured, ForceColor: true})
-	run("pslog/production/console", pslog.Options{Mode: pslog.ModeConsole, NoColor: true})
-	run("pslog/production/consolecolor", pslog.Options{Mode: pslog.ModeConsole, ForceColor: true})
+	run("pslog/production/json", pslog.Options{Mode: pslog.ModeStructured}, false, false)
+	run("pslog/production/json+with", pslog.Options{Mode: pslog.ModeStructured}, true, false)
+	run("pslog/production/json+keyvals", pslog.Options{Mode: pslog.ModeStructured}, true, true)
+	run("pslog/production/jsoncolor", pslog.Options{Mode: pslog.ModeStructured, ForceColor: true}, false, false)
+	run("pslog/production/jsoncolor+with", pslog.Options{Mode: pslog.ModeStructured, ForceColor: true}, true, false)
+	run("pslog/production/jsoncolor+keyvals", pslog.Options{Mode: pslog.ModeStructured, ForceColor: true}, true, true)
+	run("pslog/production/console", pslog.Options{Mode: pslog.ModeConsole, NoColor: true}, false, false)
+	run("pslog/production/consolecolor", pslog.Options{Mode: pslog.ModeConsole, ForceColor: true}, false, false)
 
 	zerologJSON := func() zerolog.Logger {
 		return zerolog.New(sink).With().Timestamp().Logger().Level(zerolog.TraceLevel)
@@ -197,6 +223,118 @@ func parseProductionDataset(limit int) ([]productionEntry, error) {
 		return nil, errors.New("no production log entries parsed")
 	}
 	return entries, nil
+}
+
+func productionStaticWithArgs(entries []productionEntry) ([]any, map[string]struct{}) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	constants := entries[0].toMap()
+	for k := range constants {
+		constants[k] = normalizeStaticValue(constants[k])
+	}
+	for _, entry := range entries[1:] {
+		entryMap := entry.toMap()
+		for key, value := range constants {
+			other, ok := entryMap[key]
+			if !ok {
+				delete(constants, key)
+				continue
+			}
+			if !reflect.DeepEqual(normalizeStaticValue(other), value) {
+				delete(constants, key)
+			}
+		}
+		if len(constants) == 0 {
+			break
+		}
+	}
+	if len(constants) == 0 {
+		return nil, nil
+	}
+	keys := make([]string, 0, len(constants))
+	for k := range constants {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	withArgs := make([]any, 0, len(keys)*2)
+	staticKeys := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		staticKeys[key] = struct{}{}
+		withArgs = append(withArgs, key, constants[key])
+	}
+	return withArgs, staticKeys
+}
+
+func productionEntriesWithKeyvals(entries []productionEntry) []productionEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make([]productionEntry, len(entries))
+	for i, entry := range entries {
+		converted := entry
+		converted.keyvals = pslog.Keyvals(entry.keyvals...)
+		out[i] = converted
+	}
+	return out
+}
+
+func normalizeStaticValue(value any) any {
+	switch v := value.(type) {
+	case string:
+		if trusted, ok := pslog.NewTrustedString(v); ok {
+			return trusted
+		}
+		return v
+	case pslog.TrustedString:
+		return v
+	default:
+		return value
+	}
+}
+
+func productionEntriesWithout(entries []productionEntry, staticKeys map[string]struct{}) []productionEntry {
+	if len(staticKeys) == 0 {
+		return entries
+	}
+	filtered := make([]productionEntry, len(entries))
+	for i, entry := range entries {
+		filteredEntry := entry
+		filteredEntry.keyvals = filterKeyvals(entry.keyvals, staticKeys)
+		filtered[i] = filteredEntry
+	}
+	return filtered
+}
+
+func filterKeyvals(keyvals []any, staticKeys map[string]struct{}) []any {
+	if len(keyvals) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(keyvals))
+	for i := 0; i < len(keyvals); {
+		if i+1 >= len(keyvals) {
+			out = append(out, keyvals[i:]...)
+			break
+		}
+		key := keyvals[i]
+		value := keyvals[i+1]
+		keyStr, ok := key.(string)
+		if !ok {
+			if ts, ok2 := key.(pslog.TrustedString); ok2 {
+				keyStr = string(ts)
+				ok = true
+			}
+		}
+		if ok {
+			if _, exists := staticKeys[keyStr]; exists {
+				i += 2
+				continue
+			}
+		}
+		out = append(out, key, value)
+		i += 2
+	}
+	return out
 }
 
 func zerologLevelFromPSLog(level pslog.Level) zerolog.Level {

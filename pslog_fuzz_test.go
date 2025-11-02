@@ -24,6 +24,7 @@ var jsonEscapingSeeds = []struct {
 	{"braces", "ends } braces", "brace}", `{"evil":1}`},
 	{"controls", "line\nfeed\tand\\slash", "new\nline", "tab\tvalue"},
 	{"unicode", "emoji 😃", "control" + string(rune(0)), "snowman ☃"},
+	{"del", "include\x7fdel", "key\x7f", "value\x7f"},
 }
 
 func TestStructuredJSONEscaping(t *testing.T) {
