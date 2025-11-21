@@ -289,7 +289,7 @@ func emitConsolePlainTimestampLogLevelWithBaseFields(l *consolePlainLogger, lw *
 	lw.writeString(levelLabel)
 	if msg != "" {
 		lw.writeByte(' ')
-		lw.writeString(msg)
+		writeConsoleMessagePlain(lw, msg)
 	}
 	lw.writeBytes(l.baseBytes)
 	writeRuntimeConsolePlain(lw, keyvals)
@@ -311,7 +311,7 @@ func emitConsolePlainTimestampLogLevelNoBaseFields(l *consolePlainLogger, lw *li
 	lw.writeString(levelLabel)
 	if msg != "" {
 		lw.writeByte(' ')
-		lw.writeString(msg)
+		writeConsoleMessagePlain(lw, msg)
 	}
 	writeRuntimeConsolePlain(lw, keyvals)
 	writeConsoleFieldPlain(lw, "loglevel", l.base.cfg.logLevelValue)
@@ -331,7 +331,7 @@ func emitConsolePlainTimestampWithBaseFields(l *consolePlainLogger, lw *lineWrit
 	lw.writeString(levelLabel)
 	if msg != "" {
 		lw.writeByte(' ')
-		lw.writeString(msg)
+		writeConsoleMessagePlain(lw, msg)
 	}
 	lw.writeBytes(l.baseBytes)
 	writeRuntimeConsolePlain(lw, keyvals)
@@ -351,7 +351,7 @@ func emitConsolePlainTimestampNoBaseFields(l *consolePlainLogger, lw *lineWriter
 	lw.writeString(levelLabel)
 	if msg != "" {
 		lw.writeByte(' ')
-		lw.writeString(msg)
+		writeConsoleMessagePlain(lw, msg)
 	}
 	writeRuntimeConsolePlain(lw, keyvals)
 }
@@ -367,7 +367,7 @@ func emitConsolePlainLogLevelWithBaseFields(l *consolePlainLogger, lw *lineWrite
 	lw.writeString(levelLabel)
 	if msg != "" {
 		lw.writeByte(' ')
-		lw.writeString(msg)
+		writeConsoleMessagePlain(lw, msg)
 	}
 	lw.writeBytes(l.baseBytes)
 	writeRuntimeConsolePlain(lw, keyvals)
@@ -385,7 +385,7 @@ func emitConsolePlainLogLevelNoBaseFields(l *consolePlainLogger, lw *lineWriter,
 	lw.writeString(levelLabel)
 	if msg != "" {
 		lw.writeByte(' ')
-		lw.writeString(msg)
+		writeConsoleMessagePlain(lw, msg)
 	}
 	writeRuntimeConsolePlain(lw, keyvals)
 	writeConsoleFieldPlain(lw, "loglevel", l.base.cfg.logLevelValue)
@@ -401,7 +401,7 @@ func emitConsolePlainBaseWithBaseFields(l *consolePlainLogger, lw *lineWriter, l
 	lw.writeString(levelLabel)
 	if msg != "" {
 		lw.writeByte(' ')
-		lw.writeString(msg)
+		writeConsoleMessagePlain(lw, msg)
 	}
 	lw.writeBytes(l.baseBytes)
 	writeRuntimeConsolePlain(lw, keyvals)
@@ -417,9 +417,66 @@ func emitConsolePlainBaseNoBaseFields(l *consolePlainLogger, lw *lineWriter, lev
 	lw.writeString(levelLabel)
 	if msg != "" {
 		lw.writeByte(' ')
-		lw.writeString(msg)
+		writeConsoleMessagePlain(lw, msg)
 	}
 	writeRuntimeConsolePlain(lw, keyvals)
+}
+
+// writeConsoleMessagePlain escapes control/quote/backslash in the message to
+// prevent accidental ANSI injection while keeping it unquoted for readability.
+func writeConsoleMessagePlain(lw *lineWriter, msg string) {
+	if msg == "" {
+		return
+	}
+	const hex = "0123456789abcdef"
+
+	// Fast path: scan for unsafe bytes; if none, append directly.
+	unsafePos := -1
+	for i := 0; i < len(msg); i++ {
+		c := msg[i]
+		if c < 0x20 || c == '\\' || c == '"' || c == 0x7f || c == 0x1b {
+			unsafePos = i
+			break
+		}
+	}
+	if unsafePos == -1 {
+		lw.reserve(len(msg))
+		lw.buf = append(lw.buf, msg...)
+		lw.maybeFlush()
+		return
+	}
+
+	lw.reserve(len(msg) + 8) // small headroom for escapes
+	lw.buf = append(lw.buf, msg[:unsafePos]...)
+	for i := unsafePos; i < len(msg); i++ {
+		switch c := msg[i]; c {
+		case '\n':
+			lw.buf = append(lw.buf, '\\', 'n')
+		case '\r':
+			lw.buf = append(lw.buf, '\\', 'r')
+		case '\t':
+			lw.buf = append(lw.buf, '\\', 't')
+		case '\b':
+			lw.buf = append(lw.buf, '\\', 'b')
+		case '\f':
+			lw.buf = append(lw.buf, '\\', 'f')
+		case '\\':
+			lw.buf = append(lw.buf, '\\', '\\')
+		case '"':
+			lw.buf = append(lw.buf, '\\', '"')
+		case 0x1b:
+			lw.buf = append(lw.buf, '\\', 'x', '1', 'b')
+		case 0x7f:
+			lw.buf = append(lw.buf, '\\', 'x', '7', 'f')
+		default:
+			if c < 0x20 {
+				lw.buf = append(lw.buf, '\\', 'x', hex[c>>4], hex[c&0x0f])
+			} else {
+				lw.buf = append(lw.buf, c)
+			}
+		}
+	}
+	lw.maybeFlush()
 }
 
 func consoleLevelPlain(level Level) string {

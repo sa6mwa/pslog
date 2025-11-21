@@ -152,12 +152,12 @@ func FuzzLogVariants(f *testing.F) {
 			t.Fatalf("structured json parity mismatch:\n got %v\nwant %v\nline=%s\nref=%s", gotPlain, want, plainJSON, string(refJSON))
 		}
 
-		plainConsoleLine := strings.TrimSpace(consolePlainBuf.String())
-		colorConsoleLine := strings.TrimSpace(consoleColorBuf.String())
+		plainConsoleLine := strings.TrimSpace(stripANSI(consolePlainBuf.String()))
+		colorConsoleLine := strings.TrimSpace(stripANSI(consoleColorBuf.String()))
 		if plainConsoleLine == "" || colorConsoleLine == "" {
 			t.Fatalf("empty console output plain=%q color=%q", plainConsoleLine, colorConsoleLine)
 		}
-		if plainConsoleLine != strings.TrimSpace(stripANSI(colorConsoleLine)) {
+		if plainConsoleLine != colorConsoleLine {
 			t.Fatalf("console color output mismatch:\nplain=%s\ncolor=%s", plainConsoleLine, colorConsoleLine)
 		}
 	})

@@ -6,7 +6,7 @@ import (
 )
 
 func TestFirstConsoleUnsafeIndexUnsafeBytes(t *testing.T) {
-	unsafeBytes := []byte{0x00, 0x1f, 0x20, '"', '\\', 0x7f, 0x80}
+	unsafeBytes := []byte{0x00, 0x1f, 0x20, '"', '\\', 0x7f}
 	for _, b := range unsafeBytes {
 		t.Run(hexByteName(b), func(t *testing.T) {
 			got := firstConsoleUnsafeIndex(string([]byte{b}))

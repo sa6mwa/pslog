@@ -30,15 +30,11 @@ func chunkConsoleEscapeMask(chunk uint64) uint64 {
 	mask := (chunk - jsonControlThreshold) & ^chunk & asciiHighBitsMask
 	mask |= chunkEqualMask(chunk, jsonQuoteMask)
 	mask |= chunkEqualMask(chunk, jsonBackslashMask)
-	mask |= chunk & asciiHighBitsMask
 	mask |= chunkEqualMask(chunk, consoleDelMask)
 	return mask
 }
 
 func chunkHasConsoleUnsafe(chunk uint64) bool {
-	if chunk&asciiHighBitsMask != 0 {
-		return true
-	}
 	if chunkHasJSONUnsafe(chunk) {
 		return true
 	}

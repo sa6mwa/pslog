@@ -10,9 +10,7 @@ var consoleNeedsEscape = func() [256]bool {
 	for i := range 0x20 {
 		table[i] = true
 	}
-	for i := 0x7f; i < 0x100; i++ {
-		table[i] = true
-	}
+	table[0x7f] = true
 	table['"'] = true
 	table['\\'] = true
 	return table

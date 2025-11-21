@@ -33,7 +33,7 @@ func firstConsoleUnsafeIndex(s string) int {
 }
 
 func consoleByteUnsafe(b byte) bool {
-	return b < 0x20 || b == ' ' || b == '\\' || b == '"' || b >= 0x7f
+	return b < 0x20 || b == ' ' || b == '\\' || b == '"' || b == 0x7f
 }
 
 func configureConsoleScannerFromOptions(opts Options) {}

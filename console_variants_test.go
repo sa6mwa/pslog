@@ -83,7 +83,7 @@ func TestConsoleQuotingDelAndHighBit(t *testing.T) {
 		sub   string
 	}{
 		{"del", "has\x7fdel", "value=\"has\\x7fdel\""},
-		{"highbit", string([]byte{'h', 'i', 0x80, 'g', 'h'}), "value=\"hi\\x80gh\""},
+		{"highbit", string([]byte{'h', 'i', 0x80, 'g', 'h'}), "value=" + string([]byte{'h', 'i', 0x80, 'g', 'h'})},
 	}
 
 	for _, tc := range cases {

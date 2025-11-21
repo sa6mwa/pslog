@@ -49,6 +49,7 @@ func main() {
 		"user", "alice", // Key/value (ansi.Key + ansi.String)
 		"attempts", 3, // Number (ansi.Num)
 		"latency_ms", 12.34, // Number (ansi.Num)
+		"duration", time.Microsecond*123,
 		"ok", true, // Bool (ansi.Bool)
 		"status", nil, // Nil (ansi.Nil)
 		"err", fmt.Errorf("disk full"), // String-colored error (ansi.String)
@@ -61,6 +62,7 @@ func main() {
 		"user", "alice", // Key/value (ansi.Key + ansi.String)
 		"attempts", 3, // Number (ansi.Num)
 		"latency_ms", 12.34, // Number (ansi.Num)
+		"duration", time.Microsecond*123,
 		"ok", true, // Bool (ansi.Bool)
 		"status", nil, // Nil (ansi.Nil)
 		"err", fmt.Errorf("disk full"), // String-colored error (ansi.String)
@@ -94,13 +96,13 @@ func paintTheWorld(msg string) {
 	for _, palette := range palettes {
 		fmt.Println("")
 		ansi.SetPalette(palette.palette)
-		logger := pslog.NewStructured(os.Stdout).LogLevel(pslog.TraceLevel).WithLogLevel().With("num", 1337).With("cool", true).With("palette", palette.name)
+		logger := pslog.NewStructured(os.Stdout).LogLevel(pslog.TraceLevel).WithLogLevel().With("num", 1337).With("cool", true).With("duration", time.Microsecond*123).With("palette", palette.name)
 		logger.Trace(msg)
 		logger.Debug(msg)
 		logger.Info(msg)
 		logger.Warn(msg)
 		logger.Error(msg)
-		logger = pslog.New(os.Stdout).LogLevel(pslog.TraceLevel).WithLogLevel().With("num", 1337.73).With("cool", true).With("palette", palette.name)
+		logger = pslog.New(os.Stdout).LogLevel(pslog.TraceLevel).WithLogLevel().With("num", 1337.73).With("cool", true).With("dur", time.Microsecond*123).With("palette", palette.name)
 		logger.Trace(msg)
 		logger.Debug(msg)
 		logger.Info(msg)

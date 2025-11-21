@@ -475,7 +475,59 @@ func consoleLevelColor(level Level) (string, string) {
 }
 
 func writeConsoleMessageColor(lw *lineWriter, msg string) {
-	writeConsoleColoredLiteral(lw, ansi.Message, msg)
+	if msg == "" {
+		return
+	}
+	lw.reserve(len(ansi.Message) + len(msg) + len(ansi.Reset) + 8)
+	lw.buf = append(lw.buf, ansi.Message...)
+
+	// Share the same escaping as plain messages to block control/ESC, but keep it
+	// cheap for the common case.
+	unsafePos := -1
+	for i := 0; i < len(msg); i++ {
+		c := msg[i]
+		if c < 0x20 || c == '\\' || c == '"' || c == 0x7f || c == 0x1b {
+			unsafePos = i
+			break
+		}
+	}
+	if unsafePos == -1 {
+		lw.buf = append(lw.buf, msg...)
+	} else {
+		const hex = "0123456789abcdef"
+		lw.buf = append(lw.buf, msg[:unsafePos]...)
+		for i := unsafePos; i < len(msg); i++ {
+			switch c := msg[i]; c {
+			case '\n':
+				lw.buf = append(lw.buf, '\\', 'n')
+			case '\r':
+				lw.buf = append(lw.buf, '\\', 'r')
+			case '\t':
+				lw.buf = append(lw.buf, '\\', 't')
+			case '\b':
+				lw.buf = append(lw.buf, '\\', 'b')
+			case '\f':
+				lw.buf = append(lw.buf, '\\', 'f')
+			case '\\':
+				lw.buf = append(lw.buf, '\\', '\\')
+			case '"':
+				lw.buf = append(lw.buf, '\\', '"')
+			case 0x1b:
+				lw.buf = append(lw.buf, '\\', 'x', '1', 'b')
+			case 0x7f:
+				lw.buf = append(lw.buf, '\\', 'x', '7', 'f')
+			default:
+				if c < 0x20 {
+					lw.buf = append(lw.buf, '\\', 'x', hex[c>>4], hex[c&0x0f])
+				} else {
+					lw.buf = append(lw.buf, c)
+				}
+			}
+		}
+	}
+
+	lw.buf = append(lw.buf, ansi.Reset...)
+	lw.maybeFlush()
 }
 
 func writeConsoleValueColorFast(lw *lineWriter, value any) bool {
