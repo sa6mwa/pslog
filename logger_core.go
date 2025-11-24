@@ -11,10 +11,28 @@ type field struct {
 	trustedKey bool
 }
 
+// errorMessage wraps an error string so it still satisfies the error interface.
+// This keeps the value styled as an error while guaranteeing we log the message.
+type errorMessage string
+
+func (e errorMessage) Error() string { return string(e) }
+
 func collectFields(keyvals []any) []field {
 	if len(keyvals) == 0 {
 		return nil
 	}
+
+	// Special-case a single error value so callers can write With(err).
+	if len(keyvals) == 1 {
+		if err, ok := keyvals[0].(error); ok {
+			return []field{{
+				key:        "error",
+				value:      errorMessage(err.Error()),
+				trustedKey: true,
+			}}
+		}
+	}
+
 	fields := make([]field, 0, (len(keyvals)+1)/2)
 	pair := 0
 	for i := 0; i < len(keyvals); {

@@ -1,6 +1,9 @@
 package pslog
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestCollectFieldsTracksTrustedKeys(t *testing.T) {
 	fields := collectFields([]any{
@@ -48,5 +51,29 @@ func TestCollectFieldsNilAndEmpty(t *testing.T) {
 	}
 	if fields := collectFields([]any{}); fields != nil {
 		t.Fatalf("expected empty input to return nil slice")
+	}
+}
+
+func TestCollectFieldsSingleError(t *testing.T) {
+	err := errors.New("boom")
+
+	fields := collectFields([]any{err})
+	if len(fields) != 1 {
+		t.Fatalf("expected 1 field, got %d", len(fields))
+	}
+
+	field := fields[0]
+	if field.key != "error" {
+		t.Fatalf("expected key \"error\", got %q", field.key)
+	}
+	if !field.trustedKey {
+		t.Fatalf("expected key to be trusted")
+	}
+	errValue, ok := field.value.(error)
+	if !ok {
+		t.Fatalf("expected value to implement error, got %T", field.value)
+	}
+	if got := errValue.Error(); got != err.Error() {
+		t.Fatalf("expected error message %q, got %q", err.Error(), got)
 	}
 }

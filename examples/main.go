@@ -71,6 +71,14 @@ func main() {
 	paintTheWorld("pslog was here")
 
 	fmt.Println("")
+
+	ansi.SetPalette(ansi.PaletteDefault)
+
+	logger = pslog.NewStructured(os.Stdout).WithLogLevel()
+	logger.With(fmt.Errorf("this is a test error")).Info("testing the single With(err) field", "err", fmt.Errorf("inline error"), "text", "plain field")
+	logger = pslog.New(os.Stdout).WithLogLevel()
+	logger.With(fmt.Errorf("this is a test error")).Warn("testing the single With(err) field", "err", fmt.Errorf("inline error"), "text", "plain field")
+
 }
 
 func paintTheWorld(msg string) {
@@ -109,5 +117,4 @@ func paintTheWorld(msg string) {
 		logger.Warn(msg)
 		logger.Error(msg)
 	}
-
 }
