@@ -31,3 +31,18 @@ func hexByteName(b byte) string {
 	const hexdigits = "0123456789abcdef"
 	return "byte_0x" + string([]byte{hexdigits[b>>4], hexdigits[b&0x0f]})
 }
+
+// Regression: spaces following a newline must not be hex-escaped in console values.
+func TestConsoleEscapePreservesIndentSpaces(t *testing.T) {
+	src := "Schema:\n  {\n   \"items\": {\n    \"$ref\": \"#/components/schemas/VoucherLine\"\n   },\n    \"minItems\": 2,\n    \"type\": \"array\"\n  }"
+
+	escaped := string(appendConsoleEscapedContentTo(nil, src))
+	if strings.Contains(escaped, "\\x20") {
+		t.Fatalf("escaped output incorrectly hex-escaped spaces: %q", escaped)
+	}
+
+	wantFragment := "\\n  {\\n   \\\"items\\\": {"
+	if !strings.Contains(escaped, wantFragment) {
+		t.Fatalf("escaped output missing expected fragment %q: %q", wantFragment, escaped)
+	}
+}

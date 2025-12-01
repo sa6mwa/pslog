@@ -52,6 +52,25 @@ func appendConsoleEscapedContentTo(dst []byte, s string) []byte {
 			break
 		}
 
+		// The word-wise detection above can overmatch when a control byte early in
+		// the chunk causes a borrow into later bytes. Filter the mask with the
+		// actual per-byte escape table to avoid escaping safe characters (e.g.
+		// spaces following a newline).
+		if mask != 0 {
+			m := mask
+			for b := 0; b < 8 && base+b < n; b++ {
+				if m&(0x80<<(b*8)) != 0 {
+					if !consoleNeedsEscape[s[base+b]] {
+						mask &^= 0x80 << (b * 8)
+					}
+				}
+			}
+			if mask == 0 {
+				scan = base + 8
+				continue
+			}
+		}
+
 		if lastSafe < base {
 			dst = append(dst, s[lastSafe:base]...)
 		}
