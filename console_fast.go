@@ -1,5 +1,3 @@
-//go:build amd64
-
 package pslog
 
 func appendConsoleStringInline(buf []byte, value string) []byte {

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -79,6 +80,10 @@ func main() {
 	logger = pslog.New(os.Stdout).WithLogLevel()
 	logger.With(fmt.Errorf("this is a test error")).Warn("testing the single With(err) field", "err", fmt.Errorf("inline error"), "text", "plain field")
 
+	ctx := pslog.ContextWithLogger(context.Background(), pslog.New(os.Stdout).WithLogLevel().With("logger_src", "context"))
+	pslog.Ctx(ctx).Info("This is pslog.Logger from the context")
+	pslog.BCtx(ctx).Info("And this is a pslog.Base from the same context")
+	pslog.Ctx(ctx).With(fmt.Errorf("oops")).Debug("This is the context logger with an error field")
 }
 
 func paintTheWorld(msg string) {

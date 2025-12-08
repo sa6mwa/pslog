@@ -208,27 +208,46 @@ func NewWithOptions(w io.Writer, opts Options) Logger {
 	return buildAdapter(w, opts)
 }
 
-// NewBaseLogger returns a Base implementation writing to w with default options.
+// NewBaseLogger returns a Base implementation writing to w with default
+// options.
 func NewBaseLogger(w io.Writer) Base {
 	return buildAdapter(w, Options{Mode: ModeStructured})
 }
 
-// NewBaseLoggerWithOptions returns a Base implementation using the supplied options.
+// NewBaseLoggerWithOptions returns a Base implementation using the supplied
+// options.
 func NewBaseLoggerWithOptions(w io.Writer, opts Options) Base {
 	return buildAdapter(w, opts)
 }
 
 type loggerContextKey struct{}
 
-// ContextWithLogger returns a child context carrying the supplied logger implementation.
+// ContextWithLogger returns a child context carrying the supplied pslog.Logger
+// implementation.
 func ContextWithLogger(ctx context.Context, logger Logger) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if logger == nil {
 		return ctx
 	}
 	return context.WithValue(ctx, loggerContextKey{}, logger)
 }
 
-// LoggerFromContext extracts a logger implementation from context if present or returns a NoopLogger.
+// ContextWithBaseLogger returns a child context carrying the supplied
+// pslog.Base logger implementation.
+func ContextWithBaseLogger(ctx context.Context, logger Base) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if logger == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, loggerContextKey{}, logger)
+}
+
+// LoggerFromContext extracts a pslog.Logger implementation from context if
+// present or returns a NoopLogger.
 func LoggerFromContext(ctx context.Context) Logger {
 	if ctx == nil {
 		return noopLogger{}
@@ -237,6 +256,29 @@ func LoggerFromContext(ctx context.Context) Logger {
 		return logger
 	}
 	return noopLogger{}
+}
+
+// BaseLoggerFromContext extract a pslog.Base logger implementation from context
+// if present or returns a NoopLogger.
+func BaseLoggerFromContext(ctx context.Context) Base {
+	if ctx == nil {
+		return noopLogger{}
+	}
+	if logger, ok := ctx.Value(loggerContextKey{}).(Base); ok && logger != nil {
+		return logger
+	}
+	return noopLogger{}
+}
+
+// Ctx extracts a pslog logger from context if present or return a NoopLogger.
+func Ctx(ctx context.Context) Logger {
+	return LoggerFromContext(ctx)
+}
+
+// BCtx extracts a pslog logger from context if present or a NoopLogger and
+// returns a pslog.Base logger implementation.
+func BCtx(ctx context.Context) Base {
+	return BaseLoggerFromContext(ctx)
 }
 
 // LogLogger wraps a Logger implementation into a stdlib *log.Logger.
