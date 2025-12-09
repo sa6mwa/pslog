@@ -80,10 +80,35 @@ func main() {
 	logger = pslog.New(os.Stdout).WithLogLevel()
 	logger.With(fmt.Errorf("this is a test error")).Warn("testing the single With(err) field", "err", fmt.Errorf("inline error"), "text", "plain field")
 
+	fmt.Println("")
 	ctx := pslog.ContextWithLogger(context.Background(), pslog.New(os.Stdout).WithLogLevel().With("logger_src", "context"))
 	pslog.Ctx(ctx).Info("This is pslog.Logger from the context")
 	pslog.BCtx(ctx).Info("And this is a pslog.Base from the same context")
 	pslog.Ctx(ctx).With(fmt.Errorf("oops")).Debug("This is the context logger with an error field")
+	pslog.Ctx(ctx).With("fn", pslog.CurrentFn()).Debug("Current function in fn key")
+
+	fmt.Println("")
+	ctx = pslog.ContextWithLogger(ctx, pslog.NewWithOptions(os.Stdout, pslog.Options{
+		Mode:         pslog.ModeStructured,
+		CallerKeyval: true,
+	}).WithLogLevel().With("logger_src", "context"))
+	pslog.Ctx(ctx).Warn("fn should indicate main")
+	anotherFunctionThanMain(ctx)
+	pslog.Ctx(ctx).Debug("and we are back where fn should be main")
+
+	fmt.Println("")
+	ctx = pslog.ContextWithBaseLogger(ctx, pslog.NewWithOptions(os.Stdout, pslog.Options{
+		Mode:         pslog.ModeConsole,
+		CallerKeyval: true,
+	}))
+	pslog.Ctx(ctx).Info("fn should be main")
+	anotherFunctionThanMain(ctx)
+	pslog.Ctx(ctx).Debug("back where fn should be main")
+}
+
+func anotherFunctionThanMain(ctx context.Context) {
+	pslog.Ctx(ctx).Info("fn should indicate anotherFunction than main")
+	pslog.Ctx(ctx).With(fmt.Errorf("nok")).Error("error where fn should be anotherFunction than main")
 }
 
 func paintTheWorld(msg string) {

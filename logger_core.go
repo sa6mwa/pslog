@@ -102,6 +102,9 @@ type coreConfig struct {
 	timeCache        *timeCache
 	timeFormatter    func(time.Time) string
 	timestampTrusted bool
+	includeCaller    bool
+	callerKey        string
+	callerKeyTrusted bool
 }
 
 func (c coreConfig) clone() coreConfig {
@@ -212,4 +215,19 @@ func (b *loggerBase) withForcedLevel(level Level) {
 	value := level
 	b.cfg.forcedLevel = &value
 	b.cfg.logLevelValue = LevelString(b.cfg.currentLevel())
+}
+
+func (b loggerBase) maybeAddCaller(keyvals []any) []any {
+	if !b.cfg.includeCaller {
+		return keyvals
+	}
+	key := b.cfg.callerKey
+	if key == "" {
+		return keyvals
+	}
+	keyValue := any(key)
+	if b.cfg.callerKeyTrusted {
+		keyValue = TrustedString(key)
+	}
+	return append(keyvals, keyValue, callerFunctionName())
 }

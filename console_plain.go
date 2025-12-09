@@ -50,6 +50,7 @@ func (l *consolePlainLogger) log(level Level, msg string, keyvals ...any) {
 	if !l.base.cfg.shouldLog(level) {
 		return
 	}
+	keyvals = l.base.maybeAddCaller(keyvals)
 	lw := acquireLineWriter(l.base.cfg.writer)
 	lw.autoFlush = false
 	if l.lineHint != nil {

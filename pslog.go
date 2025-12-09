@@ -186,6 +186,12 @@ type Options struct {
 
 	// UTC forces timestamps to be rendered in UTC.
 	UTC bool
+
+	// CallerKeyval emits the calling function name on every log entry.
+	CallerKeyval bool
+
+	// CallerKey sets the key used when CallerKeyval is enabled. Defaults to "fn".
+	CallerKey string
 }
 
 // New constructs a pslog adapter configured for console output.
@@ -341,6 +347,11 @@ func buildAdapter(w io.Writer, opts Options) Logger {
 	disableColor := opts.NoColor || os.Getenv("NO_COLOR") != ""
 	colorEnabled := !disableColor && (opts.ForceColor || isTerminal(w))
 
+	callerKey := opts.CallerKey
+	if callerKey == "" {
+		callerKey = "fn"
+	}
+
 	cfg := coreConfig{
 		writer:           w,
 		minLevel:         minLevel,
@@ -351,6 +362,9 @@ func buildAdapter(w io.Writer, opts Options) Logger {
 		timeFormatter:    formatter,
 		logLevelValue:    LevelString(minLevel),
 		timestampTrusted: timestampTrusted,
+		includeCaller:    opts.CallerKeyval,
+		callerKey:        callerKey,
+		callerKeyTrusted: stringTrustedASCII(callerKey),
 	}
 
 	if mode == ModeStructured {
