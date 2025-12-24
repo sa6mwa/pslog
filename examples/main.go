@@ -104,6 +104,14 @@ func main() {
 	pslog.Ctx(ctx).Info("fn should be main")
 	anotherFunctionThanMain(ctx)
 	pslog.Ctx(ctx).Debug("back where fn should be main")
+
+	fmt.Println("")
+	os.Setenv("LOG_MODE", "json")
+	os.Setenv("LOG_LEVEL", "trace")
+	os.Setenv("LOG_CALLER_KEYVAL", "t")
+	ctx = pslog.ContextWithLogger(context.Background(), pslog.LoggerFromEnv().WithLogLevel())
+	pslog.Ctx(ctx).Debug("this logger is from env")
+	pslog.Ctx(ctx).With(fmt.Errorf("oops")).Error("logger from env")
 }
 
 func anotherFunctionThanMain(ctx context.Context) {

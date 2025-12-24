@@ -131,6 +131,35 @@ Rank  Variant                             Time (ns/op)  Bytes/op  B/op  allocs/o
 > comparison. However, strictly speaking, pure json benchmarks should be used
 > for apples-to-apples comparisons.
 
+## Environment configuration
+
+`LoggerFromEnv` builds a logger from environment variables. It applies the
+values on top of seeded options and uses the same defaults as `NewWithOptions`
+when variables are missing or invalid.
+
+Recognised variables (default prefix `LOG_`):
+
+- `LOG_LEVEL` (`trace|debug|info|warn|error|fatal|panic|no|disabled`)
+- `LOG_MODE` (`console|structured|json`)
+- `LOG_TIME_FORMAT`
+- `LOG_DISABLE_TIMESTAMP` (bool)
+- `LOG_NO_COLOR` (bool)
+- `LOG_FORCE_COLOR` (bool)
+- `LOG_VERBOSE_FIELDS` (bool)
+- `LOG_UTC` (bool)
+- `LOG_CALLER_KEYVAL` (bool)
+- `LOG_CALLER_KEY`
+- `LOG_OUTPUT` (`stdout|stderr|default|/path/to/file.log|stdout+/path|stderr+/path|default+/path`)
+
+Example:
+
+```go
+logger := pslog.LoggerFromEnv(
+	pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured}),
+)
+logger.Info("ready")
+```
+
 ## Credits
 
 pslog is maintained by [sa6mwa](https://github.com/sa6mwa). Contributions are

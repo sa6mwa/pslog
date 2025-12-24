@@ -39,6 +39,16 @@
 //	logger := pslog.New(os.Stdout)
 //	logger.Warn("cache bust", "key", pslog.NewTrustedString("user:42"))
 //
+// Environment configuration is available via LoggerFromEnv. The helper reads
+// LOG_* variables (or a custom prefix) and applies them on top of seeded
+// options. LOG_OUTPUT accepts stdout, stderr, default, a file path, or
+// stdout+/stderr+/default+<path> to tee:
+//
+//	logger := pslog.LoggerFromEnv(
+//		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured}),
+//	)
+//	logger.Info("ready")
+//
 // When you want to pre-promote runtime arguments, pslog.Keyvals returns a copy
 // with trusted strings tagged in advance:
 //
