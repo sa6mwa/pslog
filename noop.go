@@ -2,6 +2,12 @@ package pslog
 
 type noopLogger struct{}
 
+// NoopLogger returns a Logger implementation that discards all output.
+func NoopLogger() Logger { return noopLogger{} }
+
+// NoopBase returns a Base implementation that discards all output.
+func NoopBase() Base { return noopLogger{} }
+
 func (noopLogger) Trace(string, ...any)            {}
 func (noopLogger) Debug(string, ...any)            {}
 func (noopLogger) Info(string, ...any)             {}
