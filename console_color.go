@@ -166,6 +166,10 @@ func (l *consoleColorLogger) LogLevelFromEnv(key string) Logger {
 	return l
 }
 
+func (l *consoleColorLogger) Close() error {
+	return closeOutput(l.base.cfg.writer)
+}
+
 func (l *consoleColorLogger) rebuildBaseBytes() {
 	l.baseBytes = encodeConsoleFieldsColor(l.base.fields)
 	l.hasBaseBytes = len(l.baseBytes) > 0

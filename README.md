@@ -160,6 +160,26 @@ logger := pslog.LoggerFromEnv(
 logger.Info("ready")
 ```
 
+## Testing
+
+Run the main suite on the host OS:
+
+```bash
+make test
+```
+
+Run host tests plus Windows tests under wine (no submodules):
+
+```bash
+make test-cross
+```
+
+You can override the wine command and verbosity:
+
+```bash
+WINE=wine64 WINEDEBUG=-all make test-cross
+```
+
 ## Credits
 
 pslog is maintained by [sa6mwa](https://github.com/sa6mwa). Contributions are

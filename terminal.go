@@ -1,11 +1,9 @@
-//go:build linux || darwin || freebsd || netbsd || openbsd
-
 package pslog
 
 import (
 	"io"
 
-	"golang.org/x/term"
+	"pkt.systems/pslog/internal/istty"
 )
 
 type fdWriter interface {
@@ -17,5 +15,5 @@ func isTerminal(w io.Writer) bool {
 	if !ok {
 		return false
 	}
-	return term.IsTerminal(int(f.Fd()))
+	return istty.IsTerminal(int(f.Fd()))
 }

@@ -228,6 +228,7 @@ func TestLoggerFromEnvOutputFile(t *testing.T) {
 	)
 
 	logger.Info("file_only")
+	closeLogger(t, logger)
 
 	if got := strings.TrimSpace(buf.String()); got != "" {
 		t.Fatalf("expected buffer empty, got %q", got)
@@ -272,6 +273,7 @@ func TestLoggerFromEnvOutputPathWithPlus(t *testing.T) {
 	)
 
 	logger.Info("plus")
+	closeLogger(t, logger)
 
 	if got := strings.TrimSpace(buf.String()); got != "" {
 		t.Fatalf("expected buffer empty, got %q", got)
@@ -298,6 +300,7 @@ func TestLoggerFromEnvOutputDefaultTee(t *testing.T) {
 	)
 
 	logger.Info("tee")
+	closeLogger(t, logger)
 
 	if !strings.Contains(buf.String(), "tee") {
 		t.Fatalf("expected buffer to contain tee output, got %q", buf.String())
@@ -348,5 +351,14 @@ func TestLoggerFromEnvOutputFailure(t *testing.T) {
 	}
 	if !foundAfter {
 		t.Fatalf("expected logger to fall back and log subsequent entries")
+	}
+}
+
+func closeLogger(t *testing.T, logger pslog.Logger) {
+	t.Helper()
+	if closer, ok := logger.(interface{ Close() error }); ok {
+		if err := closer.Close(); err != nil {
+			t.Fatalf("close logger: %v", err)
+		}
 	}
 }

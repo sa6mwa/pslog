@@ -161,6 +161,10 @@ func (l *jsonPlainLogger) LogLevelFromEnv(key string) Logger {
 	return l
 }
 
+func (l *jsonPlainLogger) Close() error {
+	return closeOutput(l.base.cfg.writer)
+}
+
 func (l *jsonPlainLogger) rebuildBasePayload() {
 	l.basePayload = encodeBaseJSONPlain(l.base.fields)
 	l.hasBasePayload = len(l.basePayload) > 0

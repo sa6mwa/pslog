@@ -132,6 +132,10 @@ func (l *consolePlainLogger) LogLevelFromEnv(key string) Logger {
 	return l
 }
 
+func (l *consolePlainLogger) Close() error {
+	return closeOutput(l.base.cfg.writer)
+}
+
 func (l *consolePlainLogger) rebuildBaseBytes() {
 	l.baseBytes = encodeConsoleFieldsPlain(l.base.fields)
 	l.hasBaseBytes = len(l.baseBytes) > 0

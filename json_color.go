@@ -153,6 +153,10 @@ func (l *jsonColorLogger) LogLevelFromEnv(key string) Logger {
 	return l
 }
 
+func (l *jsonColorLogger) Close() error {
+	return closeOutput(l.base.cfg.writer)
+}
+
 func (l *jsonColorLogger) rebuildBasePayload() {
 	l.basePayload = encodeBaseJSONColor(l.base.fields)
 	l.hasBasePayload = len(l.basePayload) > 0

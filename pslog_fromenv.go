@@ -184,7 +184,7 @@ func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
 		if err != nil {
 			return base, err
 		}
-		return io.MultiWriter(os.Stdout, fileWriter), nil
+		return newTeeWriter(fileWriter, os.Stdout, fileWriter), nil
 	case strings.HasPrefix(lowered, stderrPrefix):
 		path := strings.TrimSpace(trimmed[len(stderrPrefix):])
 		if path == "" {
@@ -194,7 +194,7 @@ func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
 		if err != nil {
 			return base, err
 		}
-		return io.MultiWriter(os.Stderr, fileWriter), nil
+		return newTeeWriter(fileWriter, os.Stderr, fileWriter), nil
 	case strings.HasPrefix(lowered, defaultPrefix):
 		path := strings.TrimSpace(trimmed[len(defaultPrefix):])
 		if path == "" {
@@ -204,7 +204,7 @@ func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
 		if err != nil {
 			return base, err
 		}
-		return io.MultiWriter(base, fileWriter), nil
+		return newTeeWriter(fileWriter, base, fileWriter), nil
 	default:
 		fileWriter, err := openLogOutputFile(trimmed)
 		if err != nil {
@@ -214,7 +214,7 @@ func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
 	}
 }
 
-func openLogOutputFile(path string) (io.Writer, error) {
+func openLogOutputFile(path string) (*os.File, error) {
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("open log output %q: %w", path, err)

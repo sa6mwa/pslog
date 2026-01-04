@@ -1,13 +1,15 @@
 GO ?= go
 QEMU_AARCH64 ?= qemu-aarch64
 QEMU_I386 ?= qemu-i386
+WINE ?= wine
+WINEDEBUG ?= -all
 
 # Modules that depend on the root via replace directives.
 BENCHMARK_DIR   := benchmark
 EXAMPLES_DIR    := examples
 ELEVATOR_DIR    := elevatorpitch
 
-.PHONY: all check test test-benchmark test-examples test-elevatorpitch \
+.PHONY: all check test test-cross test-benchmark test-examples test-elevatorpitch \
         build-examples build-elevatorpitch bench benchorder benchorder-cross \
         benchorder-arm64 benchorder-386 fuzz tidy download upgrade clean cross-build
 
@@ -16,6 +18,10 @@ all: check
 # Core module tests
 test:
 	$(GO) test -cover -count=1 -race ./...
+
+test-cross: test
+	WINEDEBUG=$(WINEDEBUG) GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+		$(GO) test -count=1 -exec "$(WINE)" ./...
 
 # Submodule checks (honour their replace directives by running in place)
 test-benchmark:

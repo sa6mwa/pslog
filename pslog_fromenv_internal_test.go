@@ -124,6 +124,7 @@ func TestWriterFromEnvOutputDefaultTee(t *testing.T) {
 	if _, err := writer.Write([]byte("tee")); err != nil {
 		t.Fatalf("write failed: %v", err)
 	}
+	closeWriter(t, writer)
 	if !strings.Contains(buf.String(), "tee") {
 		t.Fatalf("expected base writer to receive tee output")
 	}
@@ -157,6 +158,7 @@ func TestWriterFromEnvOutputStdoutTee(t *testing.T) {
 	if _, err := writer.Write([]byte("stdout")); err != nil {
 		t.Fatalf("write failed: %v", err)
 	}
+	closeWriter(t, writer)
 	_ = w.Close()
 	output, err := io.ReadAll(r)
 	if err != nil {
@@ -186,5 +188,14 @@ func TestWriterFromEnvOutputErrorFallback(t *testing.T) {
 	}
 	if writer != base {
 		t.Fatalf("expected base writer fallback")
+	}
+}
+
+func closeWriter(t *testing.T, w io.Writer) {
+	t.Helper()
+	if c, ok := w.(interface{ Close() error }); ok {
+		if err := c.Close(); err != nil {
+			t.Fatalf("close writer: %v", err)
+		}
 	}
 }
