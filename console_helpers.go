@@ -18,7 +18,6 @@ func strconvAppendFloat(buf []byte, value float64) []byte {
 	return strconv.AppendFloat(buf, value, 'f', -1, 64)
 }
 
-
 func writeConsoleQuotedString(lw *lineWriter, value string) {
 	lw.reserve(len(value)*4 + 2)
 	lw.buf = append(lw.buf, '"')

@@ -12,8 +12,8 @@ func TestConsoleMessageEscape(t *testing.T) {
 	want := "line\\nwith\\tesc\\x1b[31mred"
 
 	cases := []struct {
-		name string
-		opts Options
+		name  string
+		opts  Options
 		strip func(string) string
 	}{
 		{name: "console_plain", opts: Options{Mode: ModeConsole, DisableTimestamp: true, NoColor: true}},
