@@ -1,6 +1,6 @@
 module github.com/sa6mwa/pslog/examples
 
-go 1.24.0
+go 1.25
 
 replace pkt.systems/pslog => ../
 

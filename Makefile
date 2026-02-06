@@ -3,15 +3,18 @@ QEMU_AARCH64 ?= qemu-aarch64
 QEMU_I386 ?= qemu-i386
 WINE ?= wine
 WINEDEBUG ?= -all
+GOVER ?= 1.25
 
 # Modules that depend on the root via replace directives.
-BENCHMARK_DIR   := benchmark
-EXAMPLES_DIR    := examples
-ELEVATOR_DIR    := elevatorpitch
+BENCHMARK_DIR    := benchmark
+EXAMPLES_DIR     := examples
+ELEVATOR_DIR     := elevatorpitch
+CONTOJSON_DIR    := pslogconsole2json
 
 .PHONY: all check test test-cross test-benchmark test-examples test-elevatorpitch \
         build-examples build-elevatorpitch bench benchorder benchorder-cross \
-        benchorder-arm64 benchorder-386 fuzz tidy download upgrade clean cross-build
+        benchorder-arm64 benchorder-386 benchorder-all fuzz tidy download upgrade clean \
+        cross-build
 
 all: check
 
@@ -56,6 +59,8 @@ benchorder:
 # executed through benchorder so output is sorted/grouped.
 benchorder-cross: benchorder-arm64 benchorder-386
 
+benchorder-all: benchorder benchorder-cross
+
 benchorder-arm64:
 	cd $(BENCHMARK_DIR) && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 GOFLAGS="-exec=$(QEMU_AARCH64)" \
 		$(GO) run ./cmd/benchorder -bench '^BenchmarkPSLogProduction' -benchtime 100ms -cpuinfo=false
@@ -63,6 +68,7 @@ benchorder-arm64:
 benchorder-386:
 	cd $(BENCHMARK_DIR) && GOOS=linux GOARCH=386 CGO_ENABLED=0 GOFLAGS="-exec=$(QEMU_I386)" \
 		$(GO) run ./cmd/benchorder -bench '^BenchmarkPSLogProduction' -benchtime 100ms -cpuinfo=false
+
 
 # Discover and run all fuzz tests for 60s each.
 fuzz:
@@ -82,17 +88,30 @@ tidy:
 	cd $(BENCHMARK_DIR) && $(GO) mod tidy
 	cd $(EXAMPLES_DIR) && $(GO) mod tidy
 	cd $(ELEVATOR_DIR) && $(GO) mod tidy
+	cd $(CONTOJSON_DIR) && $(GO) mod tidy
 
 download:
 	$(GO) mod download
 	cd $(BENCHMARK_DIR) && $(GO) mod download
 	cd $(EXAMPLES_DIR) && $(GO) mod download
 	cd $(ELEVATOR_DIR) && $(GO) mod download
+	cd $(CONTOJSON_DIR) && $(GO) mod download
 
 # Upgrade dependencies across root and submodules, then tidy all.
 upgrade:
 	$(GO) get -u all
+	cd $(BENCHMARK_DIR) && $(GO) get -u all
+	cd $(EXAMPLES_DIR) && $(GO) get -u all
+	cd $(ELEVATOR_DIR) && $(GO) get -u all
+	cd $(CONTOJSON_DIR) && $(GO) get -u all
 	$(MAKE) tidy
+
+setgoversion:
+	$(GO) mod edit -go=$(GOVER)
+	cd $(BENCHMARK_DIR) && $(GO) mod edit -go=$(GOVER)
+	cd $(EXAMPLES_DIR) && $(GO) mod edit -go=$(GOVER)
+	cd $(ELEVATOR_DIR) && $(GO) mod edit -go=$(GOVER)
+	cd $(CONTOJSON_DIR) && $(GO) mod edit -go=$(GOVER)
 
 # Optional: compile-only cross-builds to catch GOARCH portability issues.
 cross-build:
@@ -100,4 +119,9 @@ cross-build:
 	GOOS=linux GOARCH=386  CGO_ENABLED=0 $(GO) build ./...
 
 clean:
-	rm -rf $(BENCHMARK_DIR)/bench*.test
+	$(GO) clean ./...
+	cd $(BENCHMARK_DIR) && $(GO) clean ./...
+	cd $(EXAMPLES_DIR) && $(GO) clean ./...
+	cd $(ELEVATOR_DIR) && $(GO) clean ./...
+	cd $(CONTOJSON_DIR) && $(GO) clean ./...
+	rm -f $(EXAMPLES_DIR)/demo/demo $(ELEVATOR_DIR)/elevatorpitch
