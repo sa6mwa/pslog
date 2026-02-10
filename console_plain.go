@@ -22,6 +22,7 @@ func newConsolePlainLogger(cfg coreConfig, opts Options) *consolePlainLogger {
 		base:     newLoggerBase(cfg, nil),
 		lineHint: new(atomic.Int64),
 	}
+	claimTimeCacheOwnership(cfg.timeCache, ownerToken(logger))
 	logger.rebuildBaseBytes()
 	return logger
 }
@@ -133,7 +134,7 @@ func (l *consolePlainLogger) LogLevelFromEnv(key string) Logger {
 }
 
 func (l *consolePlainLogger) Close() error {
-	return closeOutput(l.base.cfg.writer)
+	return closeLoggerRuntime(l.base.cfg.writer, l.base.cfg.timeCache, ownerToken(l))
 }
 
 func (l *consolePlainLogger) rebuildBaseBytes() {

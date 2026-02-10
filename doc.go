@@ -41,8 +41,9 @@
 //
 // Environment configuration is available via LoggerFromEnv. The helper reads
 // LOG_* variables (or a custom prefix) and applies them on top of seeded
-// options. LOG_OUTPUT accepts stdout, stderr, default, a file path, or
-// stdout+/stderr+/default+<path> to tee:
+// options. LOG_PALETTE accepts built-in names such as one-dark or
+// synthwave-84, and LOG_OUTPUT accepts stdout, stderr, default, a file path,
+// or stdout+/stderr+/default+<path> to tee:
 //
 //	logger := pslog.LoggerFromEnv(
 //		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured}),
@@ -59,13 +60,25 @@
 //	)
 //	logger.Info("login", dynamic...)
 //
+// Write-failure observability is available as an opt-in wrapper:
+//
+//	obs := pslog.NewObservedWriter(os.Stdout, func(f pslog.WriteFailure) {
+//		// export f.Err / f.Written / f.Attempted to metrics
+//	})
+//	logger := pslog.NewWithOptions(obs, pslog.Options{Mode: pslog.ModeStructured})
+//	logger.Info("ready")
+//	_ = obs.Stats()
+//
 // Additional examples (context helpers, palette switching, etc.) live in the
 // examples/ directory of the repository.
 //
 // # Integration notes
 //
 //   - Use Logger.LogLevel to derive loggers with different minimum levels.
-//   - The ansi subpackage exposes palette controls (ansi.SetPalette).
+//   - Set Options.Palette to a *ansi.Palette (or use NewWithPalette) to select
+//     color palettes.
+//   - The ansi subpackage also exposes palette lookup helpers
+//     (ansi.PaletteByName and ansi.AvailablePaletteNames).
 //   - pslog.LogLogger bridges to the standard library by returning a *log.Logger
 //     that feeds through to pslog.
 //

@@ -10,6 +10,7 @@ import (
 
 	"github.com/creack/pty"
 	"pkt.systems/pslog"
+	"pkt.systems/pslog/ansi"
 )
 
 func TestConsoleOutputMatchesFormat(t *testing.T) {
@@ -94,14 +95,121 @@ func TestStructuredForceColor(t *testing.T) {
 	}
 }
 
+func TestStructuredPaletteOptionOverridesColors(t *testing.T) {
+	var buf bytes.Buffer
+	customPalette := ansi.Palette{
+		Key:        "[KEY]",
+		String:     "[STR]",
+		Num:        "[NUM]",
+		Bool:       "[BOOL]",
+		Nil:        "[NIL]",
+		Trace:      "[TRC]",
+		Debug:      "[DBG]",
+		Info:       "[INF]",
+		Warn:       "[WRN]",
+		Error:      "[ERR]",
+		Fatal:      "[FTL]",
+		Panic:      "[PNC]",
+		NoLevel:    "[NOL]",
+		Timestamp:  "[TS]",
+		MessageKey: "[MSGKEY]",
+		Message:    "[MSG]",
+	}
+	logger := pslog.NewWithOptions(&buf, pslog.Options{
+		Mode:             pslog.ModeStructured,
+		DisableTimestamp: true,
+		ForceColor:       true,
+		Palette:          &customPalette,
+	})
+
+	logger.Info("msg", "foo", "bar", "count", 1, "ok", true)
+	out := buf.String()
+	if !strings.Contains(out, "[MSG]\"msg\"") {
+		t.Fatalf("expected custom message color marker in %q", out)
+	}
+	if !strings.Contains(out, "[KEY]\"foo\"") {
+		t.Fatalf("expected custom key color marker in %q", out)
+	}
+	if !strings.Contains(out, "[NUM]1") {
+		t.Fatalf("expected custom number color marker in %q", out)
+	}
+}
+
+func TestNewWithPaletteUsesProvidedPalette(t *testing.T) {
+	out := captureTTYOutput(t, func(w io.Writer) {
+		customPalette := ansi.Palette{
+			Key:        "[KEY]",
+			String:     "[STR]",
+			Num:        "[NUM]",
+			Bool:       "[BOOL]",
+			Nil:        "[NIL]",
+			Trace:      "[TRC]",
+			Debug:      "[DBG]",
+			Info:       "[INF]",
+			Warn:       "[WRN]",
+			Error:      "[ERR]",
+			Fatal:      "[FTL]",
+			Panic:      "[PNC]",
+			NoLevel:    "[NOL]",
+			Timestamp:  "[TS]",
+			MessageKey: "[MSGKEY]",
+			Message:    "[MSG]",
+		}
+		logger := pslog.NewWithPalette(w, pslog.ModeConsole, &customPalette)
+		logger.Info("hello", "foo", "bar")
+	})
+
+	if !strings.Contains(out, "[MSG]hello") {
+		t.Fatalf("expected NewWithPalette message marker in %q", out)
+	}
+	if !strings.Contains(out, "[KEY]foo=") {
+		t.Fatalf("expected NewWithPalette key marker in %q", out)
+	}
+}
+
+func TestDefaultPaletteIgnoresGlobalSetPalette(t *testing.T) {
+	snap := ansi.Snapshot()
+	t.Cleanup(func() { ansi.SetPalette(snap) })
+	ansi.SetPalette(ansi.Palette{
+		Key:        "[GLOBAL_KEY]",
+		String:     "[GLOBAL_STR]",
+		Num:        "[GLOBAL_NUM]",
+		Bool:       "[GLOBAL_BOOL]",
+		Nil:        "[GLOBAL_NIL]",
+		Trace:      "[GLOBAL_TRC]",
+		Debug:      "[GLOBAL_DBG]",
+		Info:       "[GLOBAL_INF]",
+		Warn:       "[GLOBAL_WRN]",
+		Error:      "[GLOBAL_ERR]",
+		Fatal:      "[GLOBAL_FTL]",
+		Panic:      "[GLOBAL_PNC]",
+		NoLevel:    "[GLOBAL_NOL]",
+		Timestamp:  "[GLOBAL_TS]",
+		MessageKey: "[GLOBAL_MSGKEY]",
+		Message:    "[GLOBAL_MSG]",
+	})
+
+	var buf bytes.Buffer
+	logger := pslog.NewWithOptions(&buf, pslog.Options{
+		Mode:             pslog.ModeStructured,
+		DisableTimestamp: true,
+		ForceColor:       true,
+	})
+	logger.Info("msg")
+	out := buf.String()
+	if strings.Contains(out, "[GLOBAL_") {
+		t.Fatalf("expected default palette to ignore global SetPalette, got %q", out)
+	}
+}
+
 func TestConsoleColorAutoDetectWithTTY(t *testing.T) {
-	t.Setenv("NO_COLOR", "")
+	t.Setenv("NO_COLOR", "1")
 	out := captureTTYOutput(t, func(w io.Writer) {
 		logger := pslog.NewWithOptions(w, pslog.Options{Mode: pslog.ModeConsole})
 		logger.Info("color")
 	})
 	if !hasANSI(out) {
-		t.Fatalf("expected ANSI sequences when terminal detected, got %q", out)
+		t.Fatalf("expected ANSI sequences when terminal detected even with NO_COLOR set, got %q", out)
 	}
 }
 
@@ -125,13 +233,13 @@ func TestConsoleForceColorNoTTY(t *testing.T) {
 }
 
 func TestStructuredColorAutoDetectWithTTY(t *testing.T) {
-	t.Setenv("NO_COLOR", "")
+	t.Setenv("NO_COLOR", "1")
 	out := captureTTYOutput(t, func(w io.Writer) {
 		logger := pslog.NewWithOptions(w, pslog.Options{Mode: pslog.ModeStructured})
 		logger.Info("msg", "foo", "bar")
 	})
 	if !hasANSI(out) {
-		t.Fatalf("expected colored output with terminal, got %q", out)
+		t.Fatalf("expected colored output with terminal even with NO_COLOR set, got %q", out)
 	}
 }
 

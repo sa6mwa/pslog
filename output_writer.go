@@ -4,11 +4,10 @@ import "io"
 
 type teeWriter struct {
 	writers []io.Writer
-	closer  io.Closer
 }
 
-func newTeeWriter(closer io.Closer, writers ...io.Writer) io.Writer {
-	return &teeWriter{writers: writers, closer: closer}
+func newTeeWriter(writers ...io.Writer) io.Writer {
+	return &teeWriter{writers: writers}
 }
 
 func (t *teeWriter) Write(p []byte) (int, error) {
@@ -22,11 +21,4 @@ func (t *teeWriter) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
-}
-
-func (t *teeWriter) Close() error {
-	if t.closer == nil {
-		return nil
-	}
-	return t.closer.Close()
 }

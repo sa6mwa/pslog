@@ -10,10 +10,8 @@ import (
 )
 
 func main() {
-	ansi.SetPalette(ansi.PaletteMonokaiVibrant)
-
-	l := pslog.NewStructured(os.Stdout).LogLevel(pslog.TraceLevel)
-	c := pslog.New(os.Stdout).LogLevel(pslog.TraceLevel).With("logger", "pkt.systems/pslog", "mode", "console")
+	l := pslog.NewWithPalette(os.Stdout, pslog.ModeStructured, &ansi.PaletteMonokaiVibrant).LogLevel(pslog.TraceLevel)
+	c := pslog.NewWithPalette(os.Stdout, pslog.ModeConsole, &ansi.PaletteMonokaiVibrant).LogLevel(pslog.TraceLevel).With("logger", "pkt.systems/pslog", "mode", "console")
 
 	c.Info("Hello 🤓")
 
@@ -43,9 +41,8 @@ func main() {
 
 	time.Sleep(3500 * time.Millisecond)
 
-	ansi.SetPalette(ansi.PaletteSynthwave84)
-	l = pslog.NewStructured(os.Stdout).LogLevel(pslog.TraceLevel)
-	c = pslog.New(os.Stdout).LogLevel(pslog.TraceLevel).With("logger", "pkt.systems/pslog")
+	l = pslog.NewWithPalette(os.Stdout, pslog.ModeStructured, &ansi.PaletteSynthwave84).LogLevel(pslog.TraceLevel)
+	c = pslog.NewWithPalette(os.Stdout, pslog.ModeConsole, &ansi.PaletteSynthwave84).LogLevel(pslog.TraceLevel).With("logger", "pkt.systems/pslog")
 
 	l.Trace("AI also gave us cool colors")
 

@@ -3,6 +3,7 @@ package pslog_test
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	pslog "pkt.systems/pslog"
+	"pkt.systems/pslog/ansi"
 )
 
 func TestLoggerFromEnvOverridesOptions(t *testing.T) {
@@ -115,6 +117,27 @@ func TestLoggerFromEnvDisableTimestamp(t *testing.T) {
 	}
 }
 
+func TestLoggerFromEnvNoColorDisablesColor(t *testing.T) {
+	t.Setenv("PSLOG_TEST_NO_COLOR", "true")
+
+	out := captureTTYOutput(t, func(w io.Writer) {
+		logger := pslog.LoggerFromEnv(
+			pslog.WithEnvPrefix("PSLOG_TEST_"),
+			pslog.WithEnvWriter(w),
+			pslog.WithEnvOptions(pslog.Options{
+				Mode:             pslog.ModeStructured,
+				DisableTimestamp: true,
+				ForceColor:       true,
+			}),
+		)
+		logger.Info("env_no_color")
+	})
+
+	if hasANSI(out) {
+		t.Fatalf("expected LoggerFromEnv NO_COLOR to disable color, got %q", out)
+	}
+}
+
 func TestLoggerFromEnvCallerKey(t *testing.T) {
 	t.Setenv("PSLOG_TEST_CALLER_KEYVAL", "true")
 	t.Setenv("PSLOG_TEST_CALLER_KEY", "caller")
@@ -183,6 +206,91 @@ func TestLoggerFromEnvInvalidModeKeepsSeed(t *testing.T) {
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(lines[0]), &payload); err != nil {
 		t.Fatalf("expected json output, got %q: %v", lines[0], err)
+	}
+}
+
+func TestLoggerFromEnvPalette(t *testing.T) {
+	t.Setenv("PSLOG_TEST_PALETTE", "one-dark")
+
+	var buf bytes.Buffer
+	logger := pslog.LoggerFromEnv(
+		pslog.WithEnvPrefix("PSLOG_TEST_"),
+		pslog.WithEnvWriter(&buf),
+		pslog.WithEnvOptions(pslog.Options{
+			Mode:             pslog.ModeStructured,
+			DisableTimestamp: true,
+			ForceColor:       true,
+		}),
+	)
+	logger.Info("palette")
+
+	line := strings.TrimSpace(buf.String())
+	if !strings.Contains(line, ansi.PaletteOneDark.Message+"\"palette\"") {
+		t.Fatalf("expected one-dark message color, got %q", line)
+	}
+}
+
+func TestLoggerFromEnvPaletteAliasCompatibility(t *testing.T) {
+	t.Setenv("PSLOG_TEST_PALETTE", "doom-nord")
+
+	var buf bytes.Buffer
+	logger := pslog.LoggerFromEnv(
+		pslog.WithEnvPrefix("PSLOG_TEST_"),
+		pslog.WithEnvWriter(&buf),
+		pslog.WithEnvOptions(pslog.Options{
+			Mode:             pslog.ModeStructured,
+			DisableTimestamp: true,
+			ForceColor:       true,
+		}),
+	)
+	logger.Info("alias")
+
+	line := strings.TrimSpace(buf.String())
+	if !strings.Contains(line, ansi.PaletteNord.Message+"\"alias\"") {
+		t.Fatalf("expected doom alias to resolve to nord, got %q", line)
+	}
+}
+
+func TestLoggerFromEnvInvalidPaletteFallsBackToDefault(t *testing.T) {
+	t.Setenv("PSLOG_TEST_PALETTE", "not-a-palette")
+
+	var buf bytes.Buffer
+	seededPalette := ansi.Palette{
+		Key:        "[KEY]",
+		String:     "[STR]",
+		Num:        "[NUM]",
+		Bool:       "[BOOL]",
+		Nil:        "[NIL]",
+		Trace:      "[TRC]",
+		Debug:      "[DBG]",
+		Info:       "[INF]",
+		Warn:       "[WRN]",
+		Error:      "[ERR]",
+		Fatal:      "[FTL]",
+		Panic:      "[PNC]",
+		NoLevel:    "[NOL]",
+		Timestamp:  "[TS]",
+		MessageKey: "[MSGKEY]",
+		Message:    "[MSG]",
+	}
+	logger := pslog.LoggerFromEnv(
+		pslog.WithEnvPrefix("PSLOG_TEST_"),
+		pslog.WithEnvWriter(&buf),
+		pslog.WithEnvOptions(pslog.Options{
+			Mode:             pslog.ModeStructured,
+			DisableTimestamp: true,
+			ForceColor:       true,
+			Palette:          &seededPalette,
+		}),
+	)
+	logger.Info("seed")
+
+	line := strings.TrimSpace(buf.String())
+	if strings.Contains(line, "[MSG]\"seed\"") {
+		t.Fatalf("expected invalid env palette to fall back to default palette, got %q", line)
+	}
+	if !strings.Contains(line, ansi.PaletteDefault.Message+"\"seed\"") {
+		t.Fatalf("expected invalid env palette to resolve to default palette, got %q", line)
 	}
 }
 

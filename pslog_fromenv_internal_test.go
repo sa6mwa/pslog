@@ -96,12 +96,10 @@ func TestWriterFromEnvOutputFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	file, ok := writer.(*os.File)
-	if !ok {
-		t.Fatalf("expected file writer, got %T", writer)
+	if _, err := writer.Write([]byte("file")); err != nil {
+		t.Fatalf("write failed: %v", err)
 	}
-	_, _ = file.WriteString("file")
-	_ = file.Close()
+	closeWriter(t, writer)
 
 	data, err := os.ReadFile(path)
 	if err != nil {

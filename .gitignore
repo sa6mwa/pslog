@@ -12,6 +12,7 @@ bin/
 *.test
 *.out
 *.prof
+results/
 vendor/
 .env*
 .env.local

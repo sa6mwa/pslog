@@ -59,6 +59,7 @@ func newJSONPlainLogger(cfg coreConfig, opts Options) *jsonPlainLogger {
 		verboseField: opts.VerboseFields,
 		lineHint:     new(atomic.Int64),
 	}
+	claimTimeCacheOwnership(cfg.timeCache, ownerToken(logger))
 	logger.rebuildBasePayload()
 	return logger
 }
@@ -162,7 +163,7 @@ func (l *jsonPlainLogger) LogLevelFromEnv(key string) Logger {
 }
 
 func (l *jsonPlainLogger) Close() error {
-	return closeOutput(l.base.cfg.writer)
+	return closeLoggerRuntime(l.base.cfg.writer, l.base.cfg.timeCache, ownerToken(l))
 }
 
 func (l *jsonPlainLogger) rebuildBasePayload() {

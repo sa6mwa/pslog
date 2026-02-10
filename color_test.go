@@ -11,12 +11,11 @@ import (
 )
 
 func TestColorPaletteRegression(t *testing.T) {
-	restore := overrideANSIForTest()
-	defer restore()
+	palette := overrideANSIForTest()
 
 	now := time.Unix(1_698_000_000, 0).UTC()
 
-	structured := captureLogOutput(t, ModeStructured, now)
+	structured := captureLogOutput(t, ModeStructured, now, palette)
 	assertContains(t, structured, "[KEY]\"ts\"")
 	assertContains(t, structured, "[TIMESTAMP]")
 	assertContains(t, structured, "[MSGKEY]\"msg\"")
@@ -27,7 +26,7 @@ func TestColorPaletteRegression(t *testing.T) {
 	assertContains(t, structured, "[NUM]3.14")
 	assertContains(t, structured, "[BOOL]true")
 
-	console := captureLogOutput(t, ModeConsole, now)
+	console := captureLogOutput(t, ModeConsole, now, palette)
 	assertContains(t, console, "[TIMESTAMP]")
 	assertContains(t, console, "[MSG]hello")
 	assertContains(t, console, "[ERR]")
@@ -38,7 +37,7 @@ func TestColorPaletteRegression(t *testing.T) {
 	assertContains(t, console, "[BOOL]true")
 }
 
-func captureLogOutput(t *testing.T, mode Mode, now time.Time) string {
+func captureLogOutput(t *testing.T, mode Mode, now time.Time, palette ansi.Palette) string {
 	t.Helper()
 
 	buf := &bytes.Buffer{}
@@ -46,6 +45,7 @@ func captureLogOutput(t *testing.T, mode Mode, now time.Time) string {
 		Mode:       mode,
 		ForceColor: true,
 		TimeFormat: time.RFC3339Nano,
+		Palette:    &palette,
 	})
 
 	logger.Info("hello",
@@ -67,50 +67,23 @@ func assertContains(t *testing.T, output, want string) {
 	}
 }
 
-func overrideANSIForTest() func() {
-	snap := ansiSnapshot{
-		Key:        ansi.Key,
-		String:     ansi.String,
-		Timestamp:  ansi.Timestamp,
-		MessageKey: ansi.MessageKey,
-		Message:    ansi.Message,
-		Error:      ansi.Error,
-		Num:        ansi.Num,
-		Bool:       ansi.Bool,
-		Nil:        ansi.Nil,
+func overrideANSIForTest() ansi.Palette {
+	return ansi.Palette{
+		Key:        "[KEY]",
+		String:     "[STR]",
+		Num:        "[NUM]",
+		Bool:       "[BOOL]",
+		Nil:        "[NIL]",
+		Trace:      "[TRC]",
+		Debug:      "[DBG]",
+		Info:       "[INF]",
+		Warn:       "[WRN]",
+		Error:      "[ERR]",
+		Fatal:      "[FTL]",
+		Panic:      "[PNC]",
+		NoLevel:    "[NOL]",
+		Timestamp:  "[TIMESTAMP]",
+		MessageKey: "[MSGKEY]",
+		Message:    "[MSG]",
 	}
-
-	ansi.Key = "[KEY]"
-	ansi.String = "[STR]"
-	ansi.Timestamp = "[TIMESTAMP]"
-	ansi.MessageKey = "[MSGKEY]"
-	ansi.Message = "[MSG]"
-	ansi.Error = "[ERR]"
-	ansi.Num = "[NUM]"
-	ansi.Bool = "[BOOL]"
-	ansi.Nil = "[NIL]"
-
-	return func() {
-		ansi.Key = snap.Key
-		ansi.String = snap.String
-		ansi.Timestamp = snap.Timestamp
-		ansi.MessageKey = snap.MessageKey
-		ansi.Message = snap.Message
-		ansi.Error = snap.Error
-		ansi.Num = snap.Num
-		ansi.Bool = snap.Bool
-		ansi.Nil = snap.Nil
-	}
-}
-
-type ansiSnapshot struct {
-	Key        string
-	String     string
-	Timestamp  string
-	MessageKey string
-	Message    string
-	Error      string
-	Num        string
-	Bool       string
-	Nil        string
 }

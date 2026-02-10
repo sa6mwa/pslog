@@ -167,7 +167,10 @@ type loggerBase struct {
 }
 
 func newLoggerBase(cfg coreConfig, fields []field) loggerBase {
-	return loggerBase{cfg: cfg, fields: fields}
+	return loggerBase{
+		cfg:    cfg,
+		fields: fields,
+	}
 }
 
 func (b loggerBase) clone() loggerBase {

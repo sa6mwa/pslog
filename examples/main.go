@@ -73,8 +73,6 @@ func main() {
 
 	fmt.Println("")
 
-	ansi.SetPalette(ansi.PaletteDefault)
-
 	logger = pslog.NewStructured(os.Stdout).WithLogLevel()
 	logger.With(fmt.Errorf("this is a test error")).Info("testing the single With(err) field", "err", fmt.Errorf("inline error"), "text", "plain field")
 	logger = pslog.New(os.Stdout).WithLogLevel()
@@ -122,33 +120,34 @@ func anotherFunctionThanMain(ctx context.Context) {
 func paintTheWorld(msg string) {
 	palettes := []struct {
 		name    string
-		palette ansi.Palette
+		palette *ansi.Palette
 	}{
-		{name: "ansi.PaletteDefault", palette: ansi.PaletteDefault},
-		{name: "ansi.PaletteOutrunElectric", palette: ansi.PaletteOutrunElectric},
-		{name: "ansi.PaletteTokyoNight", palette: ansi.PaletteTokyoNight},
-		{name: "ansi.PlaetteDoomDracula", palette: ansi.PaletteDoomDracula},
-		{name: "ansi.PaletteDoomGruvbox", palette: ansi.PaletteDoomGruvbox},
-		{name: "ansi.PaletteDoomIosvkem", palette: ansi.PaletteDoomIosvkem},
-		{name: "ansi.PaletteDoomNord", palette: ansi.PaletteDoomNord},
-		{name: "ansi.PaletteSolarizedNightfall", palette: ansi.PaletteSolarizedNightfall},
-		{name: "ansi.PaletteCatppuccinMocha", palette: ansi.PaletteCatppuccinMocha},
-		{name: "ansi.PaletteGruvboxLight", palette: ansi.PaletteGruvboxLight},
-		{name: "ansi.PaletteMonokaiVibrant", palette: ansi.PaletteMonokaiVibrant},
-		{name: "ansi.PaletteOneDarkAurora", palette: ansi.PaletteOneDarkAurora},
-		{name: "ansi.PaletteSynthwave84", palette: ansi.PaletteSynthwave84},
+		{name: "ansi.PaletteDefault", palette: &ansi.PaletteDefault},
+		{name: "ansi.PaletteAyuMirage", palette: &ansi.PaletteAyuMirage},
+		{name: "ansi.PaletteEverforest", palette: &ansi.PaletteEverforest},
+		{name: "ansi.PaletteOutrunElectric", palette: &ansi.PaletteOutrunElectric},
+		{name: "ansi.PaletteTokyoNight", palette: &ansi.PaletteTokyoNight},
+		{name: "ansi.PlaetteDracula", palette: &ansi.PaletteDracula},
+		{name: "ansi.PaletteGruvbox", palette: &ansi.PaletteGruvbox},
+		{name: "ansi.PaletteIosvkem", palette: &ansi.PaletteIosvkem},
+		{name: "ansi.PaletteNord", palette: &ansi.PaletteNord},
+		{name: "ansi.PaletteSolarizedNightfall", palette: &ansi.PaletteSolarizedNightfall},
+		{name: "ansi.PaletteCatppuccinMocha", palette: &ansi.PaletteCatppuccinMocha},
+		{name: "ansi.PaletteGruvboxLight", palette: &ansi.PaletteGruvboxLight},
+		{name: "ansi.PaletteMonokaiVibrant", palette: &ansi.PaletteMonokaiVibrant},
+		{name: "ansi.PaletteOneDarkAurora", palette: &ansi.PaletteOneDarkAurora},
+		{name: "ansi.PaletteSynthwave84", palette: &ansi.PaletteSynthwave84},
 	}
 
 	for _, palette := range palettes {
 		fmt.Println("")
-		ansi.SetPalette(palette.palette)
-		logger := pslog.NewStructured(os.Stdout).LogLevel(pslog.TraceLevel).WithLogLevel().With("num", 1337).With("cool", true).With("duration", time.Microsecond*123).With("palette", palette.name)
+		logger := pslog.NewWithPalette(os.Stdout, pslog.ModeStructured, palette.palette).LogLevel(pslog.TraceLevel).WithLogLevel().With("num", 1337).With("cool", true).With("duration", time.Microsecond*123).With("palette", palette.name)
 		logger.Trace(msg)
 		logger.Debug(msg)
 		logger.Info(msg)
 		logger.Warn(msg)
 		logger.Error(msg)
-		logger = pslog.New(os.Stdout).LogLevel(pslog.TraceLevel).WithLogLevel().With("num", 1337.73).With("cool", true).With("dur", time.Microsecond*123).With("palette", palette.name)
+		logger = pslog.NewWithPalette(os.Stdout, pslog.ModeConsole, palette.palette).LogLevel(pslog.TraceLevel).WithLogLevel().With("num", 1337.73).With("cool", true).With("dur", time.Microsecond*123).With("palette", palette.name)
 		logger.Trace(msg)
 		logger.Debug(msg)
 		logger.Info(msg)

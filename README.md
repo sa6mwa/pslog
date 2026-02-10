@@ -75,6 +75,28 @@ distinct traits:
 > `json+with`, and their colour counterparts should be used for apples-to-apples
 > comparisons.
 
+## Write-failure observability (opt-in)
+
+By default, pslog keeps write-failure handling out of the hot path. If you need
+explicit observability for downstream writer failures, wrap your destination
+with `ObservedWriter`.
+
+```go
+obs := pslog.NewObservedWriter(os.Stdout, func(f pslog.WriteFailure) {
+	// Hook this into metrics/alerts.
+	// f.Err, f.Written, f.Attempted
+})
+
+logger := pslog.NewWithOptions(obs, pslog.Options{Mode: pslog.ModeStructured})
+logger.Info("ready")
+
+stats := obs.Stats() // cumulative Failures + ShortWrites
+_ = stats
+```
+
+This behavior is intentionally opt-in so default logger construction keeps the
+lowest overhead profile.
+
 ## Benchmarking
 
 The benchmark suite lives under the `benchmark/` module. Typical commands:
@@ -82,6 +104,43 @@ The benchmark suite lives under the `benchmark/` module. Typical commands:
 ```bash
 go test ./benchmark -bench=. -run=^$ -benchmem
 ```
+
+Observed-writer comparison helpers:
+
+```bash
+# JSON-only A/B: json vs json+observed
+env -u NO_COLOR RUNS=4 BENCHTIME=700ms GOMAXPROCS_VALUE=1 \
+  ./benchmark/compare_json_observed.sh
+
+# Full A/B across all pslog production variants
+env -u NO_COLOR RUNS=4 BENCHTIME=500ms GOMAXPROCS_VALUE=1 \
+  ./benchmark/compare_pslog_observed_ab.sh
+
+# Baseline comparison with host-noise guard + CPU pinning
+RUNS=5 BENCHTIME=700ms PIN_CORE=6 \
+  MAX_NORMALIZED_LOAD=0.35 MAX_TOP_CPU=75 \
+  ./benchmark/compare_pslog_baseline_guarded.sh
+```
+
+`compare_pslog_baseline_guarded.sh` refuses to run when host load is too noisy,
+then delegates to `compare_pslog_baseline.sh` once the machine is within the
+configured thresholds.
+
+Performance gate:
+
+```bash
+BASE_COMMIT=97012d4 RUNS=6 BENCHTIME=700ms PIN_CORE=6 \
+  MAX_MEDIAN_DELTA_PERCENT=1.00 \
+  ./benchmark/perf_gate.sh
+```
+
+Policy for core production benchmarks (`BenchmarkPSLogProduction/pslog/production/*`):
+
+- Use commit-vs-commit AB comparisons, not only baseline snapshots.
+- Pin benchmark execution to one CPU core (default is the last core when
+  `taskset` is available; set `PIN_CORE` explicitly for reproducibility).
+- Gate on `median_delta_percent` from `compare_pslog_commits_ab.sh`.
+- Treat any benchmark above `+1.00%` median regression as a fail.
 
 The suite logs both `ns/op` and `cycles/op` in `benchmark/results/pslog_json_perf
 .csv` so regressions are easier to spot. Additional scripts (including
@@ -145,6 +204,7 @@ Recognised variables (default prefix `LOG_`):
 - `LOG_DISABLE_TIMESTAMP` (bool)
 - `LOG_NO_COLOR` (bool)
 - `LOG_FORCE_COLOR` (bool)
+- `LOG_PALETTE` (for example `one-dark`, `synthwave-84`, `doom-nord`)
 - `LOG_VERBOSE_FIELDS` (bool)
 - `LOG_UTC` (bool)
 - `LOG_CALLER_KEYVAL` (bool)
@@ -157,6 +217,16 @@ Example:
 logger := pslog.LoggerFromEnv(
 	pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured}),
 )
+logger.Info("ready")
+```
+
+Programmatic palette selection uses a pointer:
+
+```go
+logger := pslog.NewWithOptions(os.Stdout, pslog.Options{
+	Mode:    pslog.ModeStructured,
+	Palette: &ansi.PaletteOneDark,
+})
 logger.Info("ready")
 ```
 

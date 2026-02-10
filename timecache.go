@@ -44,11 +44,14 @@ func init() {
 type timeCache struct {
 	layout    string
 	utc       bool
-	once      sync.Once
 	value     atomic.Value
 	now       func() time.Time
 	newTicker func(time.Duration) tickerControl
 	formatter func(time.Time) string
+
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	stopped  atomic.Bool
 }
 
 type tickerControl struct {
@@ -63,13 +66,29 @@ func (t tickerControl) stop() {
 }
 
 func newTimeCache(layout string, utc bool, formatter func(time.Time) string) *timeCache {
-	return &timeCache{
+	cache := &timeCache{
 		layout:    layout,
 		utc:       utc,
 		now:       time.Now,
 		newTicker: defaultTicker,
 		formatter: formatter,
+		stopCh:    make(chan struct{}),
 	}
+	cache.start()
+	return cache
+}
+
+func newStandaloneTimeCache(layout string, utc bool, formatter func(time.Time) string, now func() time.Time, newTicker func(time.Duration) tickerControl) *timeCache {
+	cache := &timeCache{
+		layout:    layout,
+		utc:       utc,
+		now:       now,
+		newTicker: newTicker,
+		formatter: formatter,
+		stopCh:    make(chan struct{}),
+	}
+	cache.start()
+	return cache
 }
 
 func defaultTicker(d time.Duration) tickerControl {
@@ -80,26 +99,37 @@ func defaultTicker(d time.Duration) tickerControl {
 	}
 }
 
-func (c *timeCache) Current() string {
-	c.once.Do(func() {
-		now := c.nowTime()
-		c.value.Store(c.formatTime(now))
-		go c.refresh()
-	})
-	if v := c.value.Load(); v != nil {
-		return v.(string)
+func (c *timeCache) start() {
+	if c == nil {
+		return
 	}
-	return c.formatTime(c.nowTime())
-}
-
-func (c *timeCache) refresh() {
+	c.value.Store(c.formatTime(c.nowTime()))
 	ticker := c.makeTicker(time.Second)
 	if ticker.C == nil {
 		return
 	}
+	go c.refresh(ticker)
+}
+
+func (c *timeCache) Current() string {
+	if c == nil {
+		return ""
+	}
+	return c.value.Load().(string)
+}
+
+func (c *timeCache) refresh(ticker tickerControl) {
 	defer ticker.stop()
-	for now := range ticker.C {
-		c.value.Store(c.formatTime(now))
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case now, ok := <-ticker.C:
+			if !ok {
+				return
+			}
+			c.value.Store(c.formatTime(now))
+		}
 	}
 }
 
@@ -132,6 +162,23 @@ func (c *timeCache) makeTicker(d time.Duration) tickerControl {
 		}
 	}
 	return defaultTicker(d)
+}
+
+func (c *timeCache) Close() {
+	if c == nil {
+		return
+	}
+	c.stopped.Store(true)
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+	})
+}
+
+func (c *timeCache) isStopped() bool {
+	if c == nil {
+		return true
+	}
+	return c.stopped.Load()
 }
 
 func isCacheableLayout(layout string) bool {

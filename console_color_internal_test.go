@@ -102,6 +102,7 @@ func TestConsoleColorRuntimeSlowPath(t *testing.T) {
 }
 
 func TestConsoleColorValueEncoders(t *testing.T) {
+	palette := &ansi.PaletteDefault
 	lw := acquireLineWriter(io.Discard)
 	lw.autoFlush = false
 	defer releaseLineWriter(lw)
@@ -123,21 +124,21 @@ func TestConsoleColorValueEncoders(t *testing.T) {
 
 	for _, value := range values {
 		lw.buf = lw.buf[:0]
-		if !writeConsoleValueColorFast(lw, value) {
+		if !writeConsoleValueColorFast(lw, value, palette) {
 			t.Fatalf("fast path rejected %T", value)
 		}
 	}
 
 	for _, value := range values {
 		lw.buf = lw.buf[:0]
-		if !writeConsoleValueColorInline(lw, value) {
+		if !writeConsoleValueColorInline(lw, value, palette) {
 			t.Fatalf("inline path rejected %T", value)
 		}
 	}
 
 	for _, value := range append(values, map[string]any{"k": "v"}) {
 		lw.buf = lw.buf[:0]
-		writeConsoleValueColor(lw, value)
+		writeConsoleValueColor(lw, value, palette)
 		if len(lw.buf) == 0 {
 			t.Fatalf("no output for %T", value)
 		}
@@ -145,17 +146,18 @@ func TestConsoleColorValueEncoders(t *testing.T) {
 }
 
 func TestAppendConsoleValueColorHelpers(t *testing.T) {
+	palette := &ansi.PaletteDefault
 	buf := make([]byte, 0, 128)
-	buf = appendConsoleValueColor(buf, "value")
-	buf = appendConsoleValueColor(buf, true)
-	buf = appendConsoleValueColor(buf, int64(-3))
-	buf = appendConsoleValueColor(buf, uint64(3))
-	buf = appendConsoleValueColor(buf, 1.5)
-	buf = appendConsoleValueColor(buf, []byte("bytes"))
-	buf = appendColoredLiteral(buf, "true", ansi.Bool)
-	buf = appendColoredInt(buf, -4)
-	buf = appendColoredUint(buf, 4)
-	buf = appendColoredFloat(buf, 2.5)
+	buf = appendConsoleValueColor(buf, "value", palette)
+	buf = appendConsoleValueColor(buf, true, palette)
+	buf = appendConsoleValueColor(buf, int64(-3), palette)
+	buf = appendConsoleValueColor(buf, uint64(3), palette)
+	buf = appendConsoleValueColor(buf, 1.5, palette)
+	buf = appendConsoleValueColor(buf, []byte("bytes"), palette)
+	buf = appendColoredLiteral(buf, "true", palette.Bool)
+	buf = appendColoredInt(buf, -4, palette.Num)
+	buf = appendColoredUint(buf, 4, palette.Num)
+	buf = appendColoredFloat(buf, 2.5, palette.Num)
 
 	if !strings.Contains(string(buf), "true") {
 		t.Fatalf("appended buffer missing literal data")
@@ -163,9 +165,10 @@ func TestAppendConsoleValueColorHelpers(t *testing.T) {
 }
 
 func TestConsoleLevelColorAllBranches(t *testing.T) {
+	palette := &ansi.PaletteDefault
 	levels := []Level{TraceLevel, DebugLevel, InfoLevel, WarnLevel, ErrorLevel, FatalLevel, PanicLevel, NoLevel, Level(99)}
 	for _, lvl := range levels {
-		color, label := consoleLevelColor(lvl)
+		color, label := consoleLevelColor(lvl, palette)
 		if color == "" || label == "" {
 			t.Fatalf("empty result for level %v", lvl)
 		}

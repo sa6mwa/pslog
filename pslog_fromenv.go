@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"pkt.systems/pslog/ansi"
 )
 
 // LoggerFromEnvOption customizes LoggerFromEnv behavior.
@@ -43,7 +45,7 @@ func WithEnvWriter(w io.Writer) LoggerFromEnvOption {
 //
 // Recognised variables are: {prefix}LEVEL, VERBOSE_FIELDS, CALLER_KEYVAL,
 // CALLER_KEY, MODE (console|structured|json), TIME_FORMAT, DISABLE_TIMESTAMP,
-// NO_COLOR, FORCE_COLOR, UTC, and OUTPUT. OUTPUT accepts stdout, stderr,
+// NO_COLOR, FORCE_COLOR, PALETTE, UTC, and OUTPUT. OUTPUT accepts stdout, stderr,
 // default, a file path, or stdout+/stderr+/default+<path> to tee.
 func LoggerFromEnv(opts ...LoggerFromEnvOption) Logger {
 	cfg := loggerFromEnvConfig{prefix: "LOG_"}
@@ -102,6 +104,9 @@ func LoggerFromEnv(opts ...LoggerFromEnvOption) Logger {
 		if parsed, ok := parseEnvBool(value); ok {
 			resolvedOpts.ForceColor = parsed
 		}
+	}
+	if value, ok := lookupEnv(prefix, "PALETTE"); ok {
+		resolvedOpts.Palette = ansi.PaletteByName(value)
 	}
 	if value, ok := lookupEnv(prefix, "UTC"); ok {
 		if parsed, ok := parseEnvBool(value); ok {
@@ -184,7 +189,7 @@ func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
 		if err != nil {
 			return base, err
 		}
-		return newTeeWriter(fileWriter, os.Stdout, fileWriter), nil
+		return newOwnedOutput(newTeeWriter(os.Stdout, fileWriter), fileWriter), nil
 	case strings.HasPrefix(lowered, stderrPrefix):
 		path := strings.TrimSpace(trimmed[len(stderrPrefix):])
 		if path == "" {
@@ -194,7 +199,7 @@ func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
 		if err != nil {
 			return base, err
 		}
-		return newTeeWriter(fileWriter, os.Stderr, fileWriter), nil
+		return newOwnedOutput(newTeeWriter(os.Stderr, fileWriter), fileWriter), nil
 	case strings.HasPrefix(lowered, defaultPrefix):
 		path := strings.TrimSpace(trimmed[len(defaultPrefix):])
 		if path == "" {
@@ -204,13 +209,13 @@ func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
 		if err != nil {
 			return base, err
 		}
-		return newTeeWriter(fileWriter, base, fileWriter), nil
+		return newOwnedOutput(newTeeWriter(base, fileWriter), fileWriter), nil
 	default:
 		fileWriter, err := openLogOutputFile(trimmed)
 		if err != nil {
 			return base, err
 		}
-		return fileWriter, nil
+		return newOwnedOutput(fileWriter, fileWriter), nil
 	}
 }
 

@@ -12,6 +12,7 @@ type jsonColorEmitFunc func(l *jsonColorLogger, lw *lineWriter, level Level, msg
 
 type jsonColorLogger struct {
 	base           loggerBase
+	palette        *ansi.Palette
 	tsKeyData      []byte
 	lvlKeyData     []byte
 	msgKeyData     []byte
@@ -42,15 +43,18 @@ func newJSONColorLogger(cfg coreConfig, opts Options) *jsonColorLogger {
 		msgKey = "message"
 	}
 	configureJSONEscapeFromOptions(opts)
+	palette := resolvePaletteOption(opts.Palette)
 	logger := &jsonColorLogger{
+		palette:      palette,
 		base:         newLoggerBase(cfg, nil),
-		tsKeyData:    makeColoredKey(tsKey, ansi.Key, false),
-		lvlKeyData:   makeColoredKey(lvlKey, ansi.Key, true),
-		msgKeyData:   makeColoredKey(msgKey, ansi.MessageKey, true),
-		logLevelKey:  makeColoredKey("loglevel", ansi.Key, true),
+		tsKeyData:    makeColoredKey(tsKey, palette.Key, false),
+		lvlKeyData:   makeColoredKey(lvlKey, palette.Key, true),
+		msgKeyData:   makeColoredKey(msgKey, palette.MessageKey, true),
+		logLevelKey:  makeColoredKey("loglevel", palette.Key, true),
 		lineHint:     new(atomic.Int64),
 		verboseField: opts.VerboseFields,
 	}
+	claimTimeCacheOwnership(cfg.timeCache, ownerToken(logger))
 	logger.rebuildBasePayload()
 	return logger
 }
@@ -154,11 +158,11 @@ func (l *jsonColorLogger) LogLevelFromEnv(key string) Logger {
 }
 
 func (l *jsonColorLogger) Close() error {
-	return closeOutput(l.base.cfg.writer)
+	return closeLoggerRuntime(l.base.cfg.writer, l.base.cfg.timeCache, ownerToken(l))
 }
 
 func (l *jsonColorLogger) rebuildBasePayload() {
-	l.basePayload = encodeBaseJSONColor(l.base.fields)
+	l.basePayload = encodeBaseJSONColor(l.base.fields, l.palette)
 	l.hasBasePayload = len(l.basePayload) > 0
 	if l.base.cfg.includeLogLevel {
 		l.base.cfg.logLevelValue = LevelString(l.base.cfg.currentLevel())
@@ -193,127 +197,127 @@ func selectJSONColorEmit(cfg coreConfig, hasStaticFields bool) jsonColorEmitFunc
 
 func emitJSONColorTimestampLogLevelWithStaticFields(l *jsonColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
 	timestamp := l.base.cfg.timestamp()
-	levelColor := colorForLevel(level)
+	levelColor := colorForLevel(level, l.palette)
 	levelLabel := LevelString(level)
 	estimate := 2 + len(l.basePayload) + len(l.lvlKeyData) + len(levelLabel) +
 		len(levelColor) + len(ansi.Reset) +
-		len(l.tsKeyData) + len(timestamp) + len(ansi.Timestamp) + len(ansi.Reset) +
-		len(l.logLevelKey) + len(l.base.cfg.logLevelValue) + len(ansi.String) + len(ansi.Reset)
+		len(l.tsKeyData) + len(timestamp) + len(l.palette.Timestamp) + len(ansi.Reset) +
+		len(l.logLevelKey) + len(l.base.cfg.logLevelValue) + len(l.palette.String) + len(ansi.Reset)
 	if msg != "" {
-		estimate += len(l.msgKeyData) + len(msg) + len(ansi.Message) + len(ansi.Reset)
+		estimate += len(l.msgKeyData) + len(msg) + len(l.palette.Message) + len(ansi.Reset)
 	}
 	if n := len(keyvals); n > 0 {
-		estimate += n*8 + n*(len(ansi.Key)+len(ansi.Reset))
+		estimate += n*8 + n*(len(l.palette.Key)+len(ansi.Reset))
 	}
 	lw.reserve(estimate)
 	lw.writeByte('{')
 	first := true
-	writeColoredJSONStringField(lw, &first, l.tsKeyData, timestamp, ansi.Timestamp, l.base.cfg.timestampTrusted)
+	writeColoredJSONStringField(lw, &first, l.tsKeyData, timestamp, l.palette.Timestamp, l.base.cfg.timestampTrusted)
 	writeColoredJSONStringField(lw, &first, l.lvlKeyData, levelLabel, levelColor, true)
 	if msg != "" {
 		appendKeyDataWithFirst(lw, &first, l.msgKeyData)
-		writeColoredJSONString(lw, msg, ansi.Message)
+		writeColoredJSONString(lw, msg, l.palette.Message)
 	}
 	lw.writeBytes(l.basePayload)
 	first = false
-	writeRuntimeJSONFieldsColor(lw, &first, keyvals)
-	writeColoredJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, ansi.String, true)
+	writeRuntimeJSONFieldsColor(lw, &first, keyvals, l.palette)
+	writeColoredJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, l.palette.String, true)
 	lw.writeByte('}')
 }
 
 func emitJSONColorTimestampLogLevelNoStaticFields(l *jsonColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
 	timestamp := l.base.cfg.timestamp()
-	levelColor := colorForLevel(level)
+	levelColor := colorForLevel(level, l.palette)
 	levelLabel := LevelString(level)
 	estimate := 2 + len(l.lvlKeyData) + len(levelLabel) +
 		len(levelColor) + len(ansi.Reset) +
-		len(l.tsKeyData) + len(timestamp) + len(ansi.Timestamp) + len(ansi.Reset) +
-		len(l.logLevelKey) + len(l.base.cfg.logLevelValue) + len(ansi.String) + len(ansi.Reset)
+		len(l.tsKeyData) + len(timestamp) + len(l.palette.Timestamp) + len(ansi.Reset) +
+		len(l.logLevelKey) + len(l.base.cfg.logLevelValue) + len(l.palette.String) + len(ansi.Reset)
 	if msg != "" {
-		estimate += len(l.msgKeyData) + len(msg) + len(ansi.Message) + len(ansi.Reset)
+		estimate += len(l.msgKeyData) + len(msg) + len(l.palette.Message) + len(ansi.Reset)
 	}
 	if n := len(keyvals); n > 0 {
-		estimate += n*8 + n*(len(ansi.Key)+len(ansi.Reset))
+		estimate += n*8 + n*(len(l.palette.Key)+len(ansi.Reset))
 	}
 	lw.reserve(estimate)
 	lw.writeByte('{')
 	first := true
-	writeColoredJSONStringField(lw, &first, l.tsKeyData, timestamp, ansi.Timestamp, l.base.cfg.timestampTrusted)
+	writeColoredJSONStringField(lw, &first, l.tsKeyData, timestamp, l.palette.Timestamp, l.base.cfg.timestampTrusted)
 	writeColoredJSONStringField(lw, &first, l.lvlKeyData, levelLabel, levelColor, true)
 	if msg != "" {
 		appendKeyDataWithFirst(lw, &first, l.msgKeyData)
-		writeColoredJSONString(lw, msg, ansi.Message)
+		writeColoredJSONString(lw, msg, l.palette.Message)
 	}
-	writeRuntimeJSONFieldsColor(lw, &first, keyvals)
-	writeColoredJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, ansi.String, true)
+	writeRuntimeJSONFieldsColor(lw, &first, keyvals, l.palette)
+	writeColoredJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, l.palette.String, true)
 	lw.writeByte('}')
 }
 
 func emitJSONColorTimestampWithStaticFields(l *jsonColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
 	timestamp := l.base.cfg.timestamp()
-	levelColor := colorForLevel(level)
+	levelColor := colorForLevel(level, l.palette)
 	levelLabel := LevelString(level)
 	estimate := 2 + len(l.basePayload) + len(l.lvlKeyData) + len(levelLabel) +
 		len(levelColor) + len(ansi.Reset) +
-		len(l.tsKeyData) + len(timestamp) + len(ansi.Timestamp) + len(ansi.Reset)
+		len(l.tsKeyData) + len(timestamp) + len(l.palette.Timestamp) + len(ansi.Reset)
 	if msg != "" {
-		estimate += len(l.msgKeyData) + len(msg) + len(ansi.Message) + len(ansi.Reset)
+		estimate += len(l.msgKeyData) + len(msg) + len(l.palette.Message) + len(ansi.Reset)
 	}
 	if n := len(keyvals); n > 0 {
-		estimate += n*8 + n*(len(ansi.Key)+len(ansi.Reset))
+		estimate += n*8 + n*(len(l.palette.Key)+len(ansi.Reset))
 	}
 	lw.reserve(estimate)
 	lw.writeByte('{')
 	first := true
-	writeColoredJSONStringField(lw, &first, l.tsKeyData, timestamp, ansi.Timestamp, l.base.cfg.timestampTrusted)
+	writeColoredJSONStringField(lw, &first, l.tsKeyData, timestamp, l.palette.Timestamp, l.base.cfg.timestampTrusted)
 	writeColoredJSONStringField(lw, &first, l.lvlKeyData, levelLabel, levelColor, true)
 	if msg != "" {
 		appendKeyDataWithFirst(lw, &first, l.msgKeyData)
-		writeColoredJSONString(lw, msg, ansi.Message)
+		writeColoredJSONString(lw, msg, l.palette.Message)
 	}
 	lw.writeBytes(l.basePayload)
 	first = false
-	writeRuntimeJSONFieldsColor(lw, &first, keyvals)
+	writeRuntimeJSONFieldsColor(lw, &first, keyvals, l.palette)
 	lw.writeByte('}')
 }
 
 func emitJSONColorTimestampNoStaticFields(l *jsonColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
 	timestamp := l.base.cfg.timestamp()
-	levelColor := colorForLevel(level)
+	levelColor := colorForLevel(level, l.palette)
 	levelLabel := LevelString(level)
 	estimate := 2 + len(l.lvlKeyData) + len(levelLabel) +
 		len(levelColor) + len(ansi.Reset) +
-		len(l.tsKeyData) + len(timestamp) + len(ansi.Timestamp) + len(ansi.Reset)
+		len(l.tsKeyData) + len(timestamp) + len(l.palette.Timestamp) + len(ansi.Reset)
 	if msg != "" {
-		estimate += len(l.msgKeyData) + len(msg) + len(ansi.Message) + len(ansi.Reset)
+		estimate += len(l.msgKeyData) + len(msg) + len(l.palette.Message) + len(ansi.Reset)
 	}
 	if n := len(keyvals); n > 0 {
-		estimate += n*8 + n*(len(ansi.Key)+len(ansi.Reset))
+		estimate += n*8 + n*(len(l.palette.Key)+len(ansi.Reset))
 	}
 	lw.reserve(estimate)
 	lw.writeByte('{')
 	first := true
-	writeColoredJSONStringField(lw, &first, l.tsKeyData, timestamp, ansi.Timestamp, l.base.cfg.timestampTrusted)
+	writeColoredJSONStringField(lw, &first, l.tsKeyData, timestamp, l.palette.Timestamp, l.base.cfg.timestampTrusted)
 	writeColoredJSONStringField(lw, &first, l.lvlKeyData, levelLabel, levelColor, true)
 	if msg != "" {
 		appendKeyDataWithFirst(lw, &first, l.msgKeyData)
-		writeColoredJSONString(lw, msg, ansi.Message)
+		writeColoredJSONString(lw, msg, l.palette.Message)
 	}
-	writeRuntimeJSONFieldsColor(lw, &first, keyvals)
+	writeRuntimeJSONFieldsColor(lw, &first, keyvals, l.palette)
 	lw.writeByte('}')
 }
 
 func emitJSONColorLogLevelWithStaticFields(l *jsonColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
-	levelColor := colorForLevel(level)
+	levelColor := colorForLevel(level, l.palette)
 	levelLabel := LevelString(level)
 	estimate := 2 + len(l.basePayload) + len(l.lvlKeyData) + len(levelLabel) +
 		len(levelColor) + len(ansi.Reset) +
-		len(l.logLevelKey) + len(l.base.cfg.logLevelValue) + len(ansi.String) + len(ansi.Reset)
+		len(l.logLevelKey) + len(l.base.cfg.logLevelValue) + len(l.palette.String) + len(ansi.Reset)
 	if msg != "" {
-		estimate += len(l.msgKeyData) + len(msg) + len(ansi.Message) + len(ansi.Reset)
+		estimate += len(l.msgKeyData) + len(msg) + len(l.palette.Message) + len(ansi.Reset)
 	}
 	if n := len(keyvals); n > 0 {
-		estimate += n*8 + n*(len(ansi.Key)+len(ansi.Reset))
+		estimate += n*8 + n*(len(l.palette.Key)+len(ansi.Reset))
 	}
 	lw.reserve(estimate)
 	lw.writeByte('{')
@@ -321,26 +325,26 @@ func emitJSONColorLogLevelWithStaticFields(l *jsonColorLogger, lw *lineWriter, l
 	writeColoredJSONStringField(lw, &first, l.lvlKeyData, levelLabel, levelColor, true)
 	if msg != "" {
 		appendKeyDataWithFirst(lw, &first, l.msgKeyData)
-		writeColoredJSONString(lw, msg, ansi.Message)
+		writeColoredJSONString(lw, msg, l.palette.Message)
 	}
 	lw.writeBytes(l.basePayload)
 	first = false
-	writeRuntimeJSONFieldsColor(lw, &first, keyvals)
-	writeColoredJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, ansi.String, true)
+	writeRuntimeJSONFieldsColor(lw, &first, keyvals, l.palette)
+	writeColoredJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, l.palette.String, true)
 	lw.writeByte('}')
 }
 
 func emitJSONColorLogLevelNoStaticFields(l *jsonColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
-	levelColor := colorForLevel(level)
+	levelColor := colorForLevel(level, l.palette)
 	levelLabel := LevelString(level)
 	estimate := 2 + len(l.lvlKeyData) + len(levelLabel) +
 		len(levelColor) + len(ansi.Reset) +
-		len(l.logLevelKey) + len(l.base.cfg.logLevelValue) + len(ansi.String) + len(ansi.Reset)
+		len(l.logLevelKey) + len(l.base.cfg.logLevelValue) + len(l.palette.String) + len(ansi.Reset)
 	if msg != "" {
-		estimate += len(l.msgKeyData) + len(msg) + len(ansi.Message) + len(ansi.Reset)
+		estimate += len(l.msgKeyData) + len(msg) + len(l.palette.Message) + len(ansi.Reset)
 	}
 	if n := len(keyvals); n > 0 {
-		estimate += n*8 + n*(len(ansi.Key)+len(ansi.Reset))
+		estimate += n*8 + n*(len(l.palette.Key)+len(ansi.Reset))
 	}
 	lw.reserve(estimate)
 	lw.writeByte('{')
@@ -348,23 +352,23 @@ func emitJSONColorLogLevelNoStaticFields(l *jsonColorLogger, lw *lineWriter, lev
 	writeColoredJSONStringField(lw, &first, l.lvlKeyData, levelLabel, levelColor, true)
 	if msg != "" {
 		appendKeyDataWithFirst(lw, &first, l.msgKeyData)
-		writeColoredJSONString(lw, msg, ansi.Message)
+		writeColoredJSONString(lw, msg, l.palette.Message)
 	}
-	writeRuntimeJSONFieldsColor(lw, &first, keyvals)
-	writeColoredJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, ansi.String, true)
+	writeRuntimeJSONFieldsColor(lw, &first, keyvals, l.palette)
+	writeColoredJSONStringField(lw, &first, l.logLevelKey, l.base.cfg.logLevelValue, l.palette.String, true)
 	lw.writeByte('}')
 }
 
 func emitJSONColorBaseWithStaticFields(l *jsonColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
-	levelColor := colorForLevel(level)
+	levelColor := colorForLevel(level, l.palette)
 	levelLabel := LevelString(level)
 	estimate := 2 + len(l.basePayload) + len(l.lvlKeyData) + len(levelLabel) +
 		len(levelColor) + len(ansi.Reset)
 	if msg != "" {
-		estimate += len(l.msgKeyData) + len(msg) + len(ansi.Message) + len(ansi.Reset)
+		estimate += len(l.msgKeyData) + len(msg) + len(l.palette.Message) + len(ansi.Reset)
 	}
 	if n := len(keyvals); n > 0 {
-		estimate += n*8 + n*(len(ansi.Key)+len(ansi.Reset))
+		estimate += n*8 + n*(len(l.palette.Key)+len(ansi.Reset))
 	}
 	lw.reserve(estimate)
 	lw.writeByte('{')
@@ -372,24 +376,24 @@ func emitJSONColorBaseWithStaticFields(l *jsonColorLogger, lw *lineWriter, level
 	writeColoredJSONStringField(lw, &first, l.lvlKeyData, levelLabel, levelColor, true)
 	if msg != "" {
 		appendKeyDataWithFirst(lw, &first, l.msgKeyData)
-		writeColoredJSONString(lw, msg, ansi.Message)
+		writeColoredJSONString(lw, msg, l.palette.Message)
 	}
 	lw.writeBytes(l.basePayload)
 	first = false
-	writeRuntimeJSONFieldsColor(lw, &first, keyvals)
+	writeRuntimeJSONFieldsColor(lw, &first, keyvals, l.palette)
 	lw.writeByte('}')
 }
 
 func emitJSONColorBaseNoStaticFields(l *jsonColorLogger, lw *lineWriter, level Level, msg string, keyvals []any) {
-	levelColor := colorForLevel(level)
+	levelColor := colorForLevel(level, l.palette)
 	levelLabel := LevelString(level)
 	estimate := 2 + len(l.lvlKeyData) + len(levelLabel) +
 		len(levelColor) + len(ansi.Reset)
 	if msg != "" {
-		estimate += len(l.msgKeyData) + len(msg) + len(ansi.Message) + len(ansi.Reset)
+		estimate += len(l.msgKeyData) + len(msg) + len(l.palette.Message) + len(ansi.Reset)
 	}
 	if n := len(keyvals); n > 0 {
-		estimate += n*8 + n*(len(ansi.Key)+len(ansi.Reset))
+		estimate += n*8 + n*(len(l.palette.Key)+len(ansi.Reset))
 	}
 	lw.reserve(estimate)
 	lw.writeByte('{')
@@ -397,20 +401,20 @@ func emitJSONColorBaseNoStaticFields(l *jsonColorLogger, lw *lineWriter, level L
 	writeColoredJSONStringField(lw, &first, l.lvlKeyData, levelLabel, levelColor, true)
 	if msg != "" {
 		appendKeyDataWithFirst(lw, &first, l.msgKeyData)
-		writeColoredJSONString(lw, msg, ansi.Message)
+		writeColoredJSONString(lw, msg, l.palette.Message)
 	}
-	writeRuntimeJSONFieldsColor(lw, &first, keyvals)
+	writeRuntimeJSONFieldsColor(lw, &first, keyvals, l.palette)
 	lw.writeByte('}')
 }
 
-func writeRuntimeJSONFieldsColor(lw *lineWriter, first *bool, keyvals []any) {
-	if writeRuntimeJSONFieldsColorFast(lw, first, keyvals) {
+func writeRuntimeJSONFieldsColor(lw *lineWriter, first *bool, keyvals []any, palette *ansi.Palette) {
+	if writeRuntimeJSONFieldsColorFast(lw, first, keyvals, palette) {
 		return
 	}
-	writeRuntimeJSONFieldsColorSlow(lw, first, keyvals)
+	writeRuntimeJSONFieldsColorSlow(lw, first, keyvals, palette)
 }
 
-func writeRuntimeJSONFieldsColorFast(lw *lineWriter, first *bool, keyvals []any) bool {
+func writeRuntimeJSONFieldsColorFast(lw *lineWriter, first *bool, keyvals []any, palette *ansi.Palette) bool {
 	n := len(keyvals)
 	if n == 0 {
 		return true
@@ -438,10 +442,10 @@ func writeRuntimeJSONFieldsColorFast(lw *lineWriter, first *bool, keyvals []any)
 		} else {
 			lw.writeByte(',')
 		}
-		writeColoredKey(lw, key, ansi.Key, trusted)
+		writeColoredKey(lw, key, palette.Key, trusted)
 		lw.writeByte(':')
 		value := keyvals[i+1]
-		color := jsonColorForValue(value)
+		color := jsonColorForValue(value, palette)
 		if !writeRuntimeValueColorInline(lw, value, color) {
 			if !writeRuntimeValueColor(lw, value, color) {
 				writeColoredValue(lw, value, color)
@@ -456,9 +460,9 @@ func writeRuntimeJSONFieldsColorFast(lw *lineWriter, first *bool, keyvals []any)
 		} else {
 			lw.writeByte(',')
 		}
-		writeColoredKey(lw, argKeyName(pairIndex), ansi.Key, false)
+		writeColoredKey(lw, argKeyName(pairIndex), palette.Key, false)
 		lw.writeByte(':')
-		color := jsonColorForValue(value)
+		color := jsonColorForValue(value, palette)
 		if !writeRuntimeValueColor(lw, value, color) {
 			writeColoredValue(lw, value, color)
 		}
@@ -466,7 +470,7 @@ func writeRuntimeJSONFieldsColorFast(lw *lineWriter, first *bool, keyvals []any)
 	return true
 }
 
-func writeRuntimeJSONFieldsColorSlow(lw *lineWriter, first *bool, keyvals []any) {
+func writeRuntimeJSONFieldsColorSlow(lw *lineWriter, first *bool, keyvals []any, palette *ansi.Palette) {
 	n := len(keyvals)
 	if n == 0 {
 		return
@@ -474,27 +478,27 @@ func writeRuntimeJSONFieldsColorSlow(lw *lineWriter, first *bool, keyvals []any)
 
 	pairIndex := 0
 	if n >= 2 {
-		pairIndex = writeRuntimeJSONPairColor(lw, first, keyvals[0], keyvals[1], pairIndex)
+		pairIndex = writeRuntimeJSONPairColor(lw, first, keyvals[0], keyvals[1], pairIndex, palette)
 		if n >= 4 {
-			pairIndex = writeRuntimeJSONPairColor(lw, first, keyvals[2], keyvals[3], pairIndex)
+			pairIndex = writeRuntimeJSONPairColor(lw, first, keyvals[2], keyvals[3], pairIndex, palette)
 			for i := 4; i+1 < n; i += 2 {
-				pairIndex = writeRuntimeJSONPairColor(lw, first, keyvals[i], keyvals[i+1], pairIndex)
+				pairIndex = writeRuntimeJSONPairColor(lw, first, keyvals[i], keyvals[i+1], pairIndex, palette)
 			}
 			if n&1 == 1 {
-				writeRuntimeJSONOddColor(lw, first, keyvals[n-1], pairIndex)
+				writeRuntimeJSONOddColor(lw, first, keyvals[n-1], pairIndex, palette)
 			}
 			return
 		}
 		if n == 3 {
-			writeRuntimeJSONOddColor(lw, first, keyvals[2], pairIndex)
+			writeRuntimeJSONOddColor(lw, first, keyvals[2], pairIndex, palette)
 		}
 		return
 	}
 
-	writeRuntimeJSONOddColor(lw, first, keyvals[0], pairIndex)
+	writeRuntimeJSONOddColor(lw, first, keyvals[0], pairIndex, palette)
 }
 
-func writeRuntimeJSONPairColor(lw *lineWriter, first *bool, key any, value any, pairIndex int) int {
+func writeRuntimeJSONPairColor(lw *lineWriter, first *bool, key any, value any, pairIndex int, palette *ansi.Palette) int {
 	k, trusted := runtimeKeyFromValue(key, pairIndex)
 	if k != "" {
 		if *first {
@@ -502,9 +506,9 @@ func writeRuntimeJSONPairColor(lw *lineWriter, first *bool, key any, value any, 
 		} else {
 			lw.writeByte(',')
 		}
-		writeColoredKey(lw, k, ansi.Key, trusted)
+		writeColoredKey(lw, k, palette.Key, trusted)
 		lw.writeByte(':')
-		color := jsonColorForValue(value)
+		color := jsonColorForValue(value, palette)
 		if !writeRuntimeValueColor(lw, value, color) {
 			writeColoredValue(lw, value, color)
 		}
@@ -512,15 +516,15 @@ func writeRuntimeJSONPairColor(lw *lineWriter, first *bool, key any, value any, 
 	return pairIndex + 1
 }
 
-func writeRuntimeJSONOddColor(lw *lineWriter, first *bool, value any, pairIndex int) {
+func writeRuntimeJSONOddColor(lw *lineWriter, first *bool, value any, pairIndex int, palette *ansi.Palette) {
 	if *first {
 		*first = false
 	} else {
 		lw.writeByte(',')
 	}
-	writeColoredKey(lw, argKeyName(pairIndex), ansi.Key, false)
+	writeColoredKey(lw, argKeyName(pairIndex), palette.Key, false)
 	lw.writeByte(':')
-	color := jsonColorForValue(value)
+	color := jsonColorForValue(value, palette)
 	if !writeRuntimeValueColorInline(lw, value, color) {
 		if !writeRuntimeValueColor(lw, value, color) {
 			writeColoredValue(lw, value, color)
@@ -542,7 +546,7 @@ func writeColoredValue(lw *lineWriter, value any, color string) {
 	}
 }
 
-func encodeBaseJSONColor(fields []field) []byte {
+func encodeBaseJSONColor(fields []field, palette *ansi.Palette) []byte {
 	if len(fields) == 0 {
 		return nil
 	}
@@ -553,9 +557,9 @@ func encodeBaseJSONColor(fields []field) []byte {
 			continue
 		}
 		lw.writeByte(',')
-		writeColoredKey(lw, f.key, ansi.Key, f.trustedKey)
+		writeColoredKey(lw, f.key, palette.Key, f.trustedKey)
 		lw.writeByte(':')
-		writeColoredValue(lw, f.value, jsonColorForValue(f.value))
+		writeColoredValue(lw, f.value, jsonColorForValue(f.value, palette))
 	}
 	data := append([]byte(nil), lw.buf...)
 	releaseLineWriter(lw)
@@ -579,46 +583,46 @@ func writeColoredJSONString(lw *lineWriter, value string, color string) {
 	writePTJSONStringColored(lw, color, value)
 }
 
-func jsonColorForValue(value any) string {
+func jsonColorForValue(value any, palette *ansi.Palette) string {
 	switch value.(type) {
 	case error:
-		return ansi.Error
+		return palette.Error
 	case TrustedString, string, time.Duration, []byte:
-		return ansi.String
+		return palette.String
 	case time.Time:
-		return ansi.Timestamp
+		return palette.Timestamp
 	case stringer:
-		return ansi.String
+		return palette.String
 	case bool:
-		return ansi.Bool
+		return palette.Bool
 	case int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64, uintptr,
 		float32, float64:
-		return ansi.Num
+		return palette.Num
 	case nil:
-		return ansi.Nil
+		return palette.Nil
 	default:
 		return ""
 	}
 }
 
-func colorForLevel(level Level) string {
+func colorForLevel(level Level, palette *ansi.Palette) string {
 	switch level {
 	case TraceLevel:
-		return ansi.Trace
+		return palette.Trace
 	case DebugLevel:
-		return ansi.Debug
+		return palette.Debug
 	case InfoLevel:
-		return ansi.Info
+		return palette.Info
 	case WarnLevel:
-		return ansi.Warn
+		return palette.Warn
 	case ErrorLevel:
-		return ansi.Error
+		return palette.Error
 	case FatalLevel, PanicLevel:
-		return ansi.Fatal
+		return palette.Fatal
 	case NoLevel:
-		return ansi.NoLevel
+		return palette.NoLevel
 	default:
-		return ansi.Info
+		return palette.Info
 	}
 }

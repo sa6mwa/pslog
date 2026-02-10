@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"pkt.systems/pslog/ansi"
 )
 
 // Base defines the smallest set of convenience methods that library authors can
@@ -178,6 +180,10 @@ type Options struct {
 	// destination is not a TTY. Useful for tests and forced-colour logs.
 	ForceColor bool
 
+	// Palette overrides the ANSI palette for colorized console/JSON loggers.
+	// When nil, pslog uses ansi.PaletteDefault.
+	Palette *ansi.Palette
+
 	// MinLevel sets the minimum level the adapter will emit. Defaults to Debug.
 	MinLevel Level
 
@@ -212,6 +218,11 @@ func NewStructuredNoColor(w io.Writer) Logger {
 // NewWithOptions builds a pslog adapter with explicit settings.
 func NewWithOptions(w io.Writer, opts Options) Logger {
 	return buildAdapter(w, opts)
+}
+
+// NewWithPalette builds a logger in mode using palette for colorized output.
+func NewWithPalette(w io.Writer, mode Mode, palette *ansi.Palette) Logger {
+	return NewWithOptions(w, Options{Mode: mode, Palette: palette})
 }
 
 // NewBaseLogger returns a Base implementation writing to w with default
@@ -344,7 +355,7 @@ func buildAdapter(w io.Writer, opts Options) Logger {
 		}
 		timestampTrusted = promoteTrustedValueString(formatted)
 	}
-	disableColor := opts.NoColor || os.Getenv("NO_COLOR") != ""
+	disableColor := opts.NoColor
 	colorEnabled := !disableColor && (opts.ForceColor || isTerminal(w))
 
 	callerKey := opts.CallerKey
