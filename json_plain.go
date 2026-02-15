@@ -16,6 +16,7 @@ type jsonPlainLogger struct {
 	hasBasePayload bool
 	logLevelKey    []byte
 	lineHint       *atomic.Int64
+	floatPolicy    NonFiniteFloatPolicy
 	verboseField   bool
 	emit           jsonPlainEmitFunc
 }
@@ -56,6 +57,7 @@ func newJSONPlainLogger(cfg coreConfig, opts Options) *jsonPlainLogger {
 		lvlKeyData:   makeKeyData(lvlKey, true),
 		msgKeyData:   makeKeyData(msgKey, true),
 		logLevelKey:  makeKeyData("loglevel", true),
+		floatPolicy:  normalizeNonFiniteFloatPolicy(opts.NonFiniteFloatPolicy),
 		verboseField: opts.VerboseFields,
 		lineHint:     new(atomic.Int64),
 	}
@@ -91,6 +93,9 @@ func (l *jsonPlainLogger) log(level Level, msg string, keyvals ...any) {
 	keyvals = l.base.maybeAddCaller(keyvals)
 	lw := acquireLineWriter(l.base.cfg.writer)
 	lw.autoFlush = false
+	if l.floatPolicy != NonFiniteFloatAsString {
+		lw.floatPolicy = l.floatPolicy
+	}
 	if l.lineHint != nil {
 		if hint := l.lineHint.Load(); hint > 0 {
 			lw.preallocate(int(hint))
@@ -167,7 +172,7 @@ func (l *jsonPlainLogger) Close() error {
 }
 
 func (l *jsonPlainLogger) rebuildBasePayload() {
-	l.basePayload = encodeBaseJSONPlain(l.base.fields)
+	l.basePayload = encodeBaseJSONPlain(l.base.fields, l.floatPolicy)
 	l.hasBasePayload = len(l.basePayload) > 0
 	if l.base.cfg.includeLogLevel {
 		l.base.cfg.logLevelValue = LevelString(l.base.cfg.currentLevel())
@@ -372,7 +377,7 @@ func emitJSONPlainBaseNoStaticFields(l *jsonPlainLogger, lw *lineWriter, level L
 	lw.writeByte('}')
 }
 
-func encodeBaseJSONPlain(fields []field) []byte {
+func encodeBaseJSONPlain(fields []field, floatPolicy NonFiniteFloatPolicy) []byte {
 	if len(fields) == 0 {
 		return nil
 	}
@@ -392,15 +397,19 @@ func encodeBaseJSONPlain(fields []field) []byte {
 		} else {
 			buf = appendEscapedKey(buf, f.key)
 		}
-		buf = appendJSONValuePlain(buf, f.value)
+		buf = appendJSONValuePlain(buf, f.value, floatPolicy)
 	}
 	return buf
 }
 
 func writeRuntimeJSONFieldsPlain(lw *lineWriter, first *bool, keyvals []any) {
+	startLen := len(lw.buf)
+	startFirst := *first
 	if writeRuntimeJSONFieldsPlainFast(lw, first, keyvals) {
 		return
 	}
+	lw.buf = lw.buf[:startLen]
+	*first = startFirst
 	writeRuntimeJSONFieldsPlainSlow(lw, first, keyvals)
 }
 
@@ -519,9 +528,10 @@ func writeRuntimeJSONOddPlain(lw *lineWriter, first *bool, value any, pairIndex 
 	}
 }
 
-func appendJSONValuePlain(buf []byte, value any) []byte {
+func appendJSONValuePlain(buf []byte, value any, floatPolicy NonFiniteFloatPolicy) []byte {
 	lw := acquireLineWriter(io.Discard)
 	lw.autoFlush = false
+	lw.floatPolicy = floatPolicy
 	writePTLogValue(lw, value)
 	buf = append(buf, lw.buf...)
 	releaseLineWriter(lw)

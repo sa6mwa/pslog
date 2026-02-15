@@ -25,6 +25,7 @@ type lineWriter struct {
 	boolCache     [2]literalCacheEntry
 	stringCache   [stringCacheSlots]literalCacheEntry
 	nullLiteral   literalCacheEntry
+	floatPolicy   NonFiniteFloatPolicy
 }
 
 const (
@@ -70,6 +71,7 @@ func acquireLineWriter(dst io.Writer) *lineWriter {
 	lw.buf = lw.buf[:0]
 	lw.lastLen = 0
 	lw.autoFlush = true
+	lw.floatPolicy = NonFiniteFloatAsString
 	return lw
 }
 
@@ -89,6 +91,7 @@ func releaseLineWriter(lw *lineWriter) {
 	lw.nullLiteral = literalCacheEntry{}
 	lw.autoFlush = true
 	lw.lastLen = 0
+	lw.floatPolicy = NonFiniteFloatAsString
 	lineWriterPool.Put(lw)
 }
 

@@ -44,7 +44,7 @@ func writeJSONUintColored(w *lineWriter, n uint64, color string) {
 
 func writeJSONFloat(w *lineWriter, f float64, _ bool) {
 	if math.IsNaN(f) || math.IsInf(f, 0) {
-		writeJSONStringPlain(w, "NaN")
+		writeJSONNonFiniteFloat(w, f, "")
 		return
 	}
 	w.writeFloat64(f)
@@ -56,7 +56,7 @@ func writeJSONFloatColored(w *lineWriter, f float64, color string) {
 		return
 	}
 	if math.IsNaN(f) || math.IsInf(f, 0) {
-		writePTJSONStringColored(w, color, "NaN")
+		writeJSONNonFiniteFloat(w, f, color)
 		return
 	}
 	w.reserve(len(color) + 32 + len(ansi.Reset))
@@ -64,6 +64,32 @@ func writeJSONFloatColored(w *lineWriter, f float64, color string) {
 	w.buf = strconv.AppendFloat(w.buf, f, 'f', -1, 64)
 	w.buf = append(w.buf, ansi.Reset...)
 	w.maybeFlush()
+}
+
+func writeJSONNonFiniteFloat(w *lineWriter, f float64, color string) {
+	if w.floatPolicy == NonFiniteFloatAsNull {
+		if color == "" {
+			w.writeNullLiteral()
+			return
+		}
+		w.reserve(len(color) + len("null") + len(ansi.Reset))
+		w.buf = append(w.buf, color...)
+		w.buf = append(w.buf, 'n', 'u', 'l', 'l')
+		w.buf = append(w.buf, ansi.Reset...)
+		w.maybeFlush()
+		return
+	}
+	literal := "NaN"
+	if math.IsInf(f, 1) {
+		literal = "+Inf"
+	} else if math.IsInf(f, -1) {
+		literal = "-Inf"
+	}
+	if color == "" {
+		writeJSONStringPlain(w, literal)
+		return
+	}
+	writePTJSONStringColored(w, color, literal)
 }
 
 func writeJSONBoolColored(w *lineWriter, v bool, color string) {

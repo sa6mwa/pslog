@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -61,7 +62,7 @@ func TestParseEnvMode(t *testing.T) {
 
 func TestWriterFromEnvOutputDefaultKeepsBase(t *testing.T) {
 	base := &bytes.Buffer{}
-	writer, err := writerFromEnvOutput("default", base)
+	writer, err := writerFromEnvOutput("default", base, defaultOutputFileMode)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -71,7 +72,7 @@ func TestWriterFromEnvOutputDefaultKeepsBase(t *testing.T) {
 }
 
 func TestWriterFromEnvOutputStdoutStderr(t *testing.T) {
-	writer, err := writerFromEnvOutput("stdout", nil)
+	writer, err := writerFromEnvOutput("stdout", nil, defaultOutputFileMode)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -79,7 +80,7 @@ func TestWriterFromEnvOutputStdoutStderr(t *testing.T) {
 		t.Fatalf("expected stdout writer")
 	}
 
-	writer, err = writerFromEnvOutput("stderr", nil)
+	writer, err = writerFromEnvOutput("stderr", nil, defaultOutputFileMode)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -92,7 +93,7 @@ func TestWriterFromEnvOutputFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "output.log")
 
-	writer, err := writerFromEnvOutput(path, nil)
+	writer, err := writerFromEnvOutput(path, nil, defaultOutputFileMode)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -115,7 +116,7 @@ func TestWriterFromEnvOutputDefaultTee(t *testing.T) {
 	path := filepath.Join(dir, "tee.log")
 
 	var buf bytes.Buffer
-	writer, err := writerFromEnvOutput("default+"+path, &buf)
+	writer, err := writerFromEnvOutput("default+"+path, &buf, defaultOutputFileMode)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -149,7 +150,7 @@ func TestWriterFromEnvOutputStdoutTee(t *testing.T) {
 		os.Stdout = old
 	})
 
-	writer, err := writerFromEnvOutput("stdout+"+path, nil)
+	writer, err := writerFromEnvOutput("stdout+"+path, nil, defaultOutputFileMode)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -180,7 +181,7 @@ func TestWriterFromEnvOutputErrorFallback(t *testing.T) {
 	dir := t.TempDir()
 
 	base := &bytes.Buffer{}
-	writer, err := writerFromEnvOutput(dir, base)
+	writer, err := writerFromEnvOutput(dir, base, defaultOutputFileMode)
 	if err == nil {
 		t.Fatalf("expected error for directory output")
 	}
@@ -194,6 +195,81 @@ func closeWriter(t *testing.T, w io.Writer) {
 	if c, ok := w.(interface{ Close() error }); ok {
 		if err := c.Close(); err != nil {
 			t.Fatalf("close writer: %v", err)
+		}
+	}
+}
+
+func TestWriterFromEnvOutputFileModeDefault(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file mode checks are platform-dependent on Windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "default-mode.log")
+
+	writer, err := writerFromEnvOutput(path, nil, defaultOutputFileMode)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := writer.Write([]byte("file")); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+	closeWriter(t, writer)
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat file: %v", err)
+	}
+	if got := info.Mode().Perm(); got&^defaultOutputFileMode != 0 {
+		t.Fatalf("unexpected file mode: %o", got)
+	}
+}
+
+func TestWriterFromEnvOutputFileModeOverride(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file mode checks are platform-dependent on Windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "override-mode.log")
+	overrideMode := os.FileMode(0o644)
+
+	writer, err := writerFromEnvOutput(path, nil, overrideMode)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := writer.Write([]byte("file")); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+	closeWriter(t, writer)
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat file: %v", err)
+	}
+	if got := info.Mode().Perm(); got&^overrideMode != 0 {
+		t.Fatalf("expected file mode masked by umask from %o, got %o", overrideMode, got)
+	}
+}
+
+func TestParseEnvFileMode(t *testing.T) {
+	cases := []struct {
+		value string
+		want  os.FileMode
+		ok    bool
+	}{
+		{"600", 0o600, true},
+		{"0644", 0o644, true},
+		{"0o644", 0o644, true},
+		{"0O640", 0o640, true},
+		{"1777", 0, false},
+		{"888", 0, false},
+		{"0x1ff", 0, false},
+		{"bad", 0, false},
+		{"", 0, false},
+	}
+	for _, tc := range cases {
+		got, ok := parseEnvFileMode(tc.value)
+		if ok != tc.ok || got != tc.want {
+			t.Fatalf("parseEnvFileMode(%q)=%o,%v want %o,%v", tc.value, got, ok, tc.want, tc.ok)
 		}
 	}
 }

@@ -20,6 +20,7 @@ type jsonColorLogger struct {
 	hasBasePayload bool
 	logLevelKey    []byte
 	lineHint       *atomic.Int64
+	floatPolicy    NonFiniteFloatPolicy
 	verboseField   bool
 	emit           jsonColorEmitFunc
 }
@@ -51,6 +52,7 @@ func newJSONColorLogger(cfg coreConfig, opts Options) *jsonColorLogger {
 		lvlKeyData:   makeColoredKey(lvlKey, palette.Key, true),
 		msgKeyData:   makeColoredKey(msgKey, palette.MessageKey, true),
 		logLevelKey:  makeColoredKey("loglevel", palette.Key, true),
+		floatPolicy:  normalizeNonFiniteFloatPolicy(opts.NonFiniteFloatPolicy),
 		lineHint:     new(atomic.Int64),
 		verboseField: opts.VerboseFields,
 	}
@@ -86,6 +88,9 @@ func (l *jsonColorLogger) log(level Level, msg string, keyvals ...any) {
 	keyvals = l.base.maybeAddCaller(keyvals)
 	lw := acquireLineWriter(l.base.cfg.writer)
 	lw.autoFlush = false
+	if l.floatPolicy != NonFiniteFloatAsString {
+		lw.floatPolicy = l.floatPolicy
+	}
 	if l.lineHint != nil {
 		if hint := l.lineHint.Load(); hint > 0 {
 			lw.preallocate(int(hint))
@@ -162,7 +167,7 @@ func (l *jsonColorLogger) Close() error {
 }
 
 func (l *jsonColorLogger) rebuildBasePayload() {
-	l.basePayload = encodeBaseJSONColor(l.base.fields, l.palette)
+	l.basePayload = encodeBaseJSONColor(l.base.fields, l.palette, l.floatPolicy)
 	l.hasBasePayload = len(l.basePayload) > 0
 	if l.base.cfg.includeLogLevel {
 		l.base.cfg.logLevelValue = LevelString(l.base.cfg.currentLevel())
@@ -408,9 +413,13 @@ func emitJSONColorBaseNoStaticFields(l *jsonColorLogger, lw *lineWriter, level L
 }
 
 func writeRuntimeJSONFieldsColor(lw *lineWriter, first *bool, keyvals []any, palette *ansi.Palette) {
+	startLen := len(lw.buf)
+	startFirst := *first
 	if writeRuntimeJSONFieldsColorFast(lw, first, keyvals, palette) {
 		return
 	}
+	lw.buf = lw.buf[:startLen]
+	*first = startFirst
 	writeRuntimeJSONFieldsColorSlow(lw, first, keyvals, palette)
 }
 
@@ -445,12 +454,7 @@ func writeRuntimeJSONFieldsColorFast(lw *lineWriter, first *bool, keyvals []any,
 		writeColoredKey(lw, key, palette.Key, trusted)
 		lw.writeByte(':')
 		value := keyvals[i+1]
-		color := jsonColorForValue(value, palette)
-		if !writeRuntimeValueColorInline(lw, value, color) {
-			if !writeRuntimeValueColor(lw, value, color) {
-				writeColoredValue(lw, value, color)
-			}
-		}
+		writeRuntimeJSONValueColor(lw, value, palette)
 		pairIndex++
 	}
 	if n&1 == 1 {
@@ -462,10 +466,7 @@ func writeRuntimeJSONFieldsColorFast(lw *lineWriter, first *bool, keyvals []any,
 		}
 		writeColoredKey(lw, argKeyName(pairIndex), palette.Key, false)
 		lw.writeByte(':')
-		color := jsonColorForValue(value, palette)
-		if !writeRuntimeValueColor(lw, value, color) {
-			writeColoredValue(lw, value, color)
-		}
+		writeRuntimeJSONValueColor(lw, value, palette)
 	}
 	return true
 }
@@ -508,10 +509,7 @@ func writeRuntimeJSONPairColor(lw *lineWriter, first *bool, key any, value any, 
 		}
 		writeColoredKey(lw, k, palette.Key, trusted)
 		lw.writeByte(':')
-		color := jsonColorForValue(value, palette)
-		if !writeRuntimeValueColor(lw, value, color) {
-			writeColoredValue(lw, value, color)
-		}
+		writeRuntimeJSONValueColor(lw, value, palette)
 	}
 	return pairIndex + 1
 }
@@ -524,12 +522,7 @@ func writeRuntimeJSONOddColor(lw *lineWriter, first *bool, value any, pairIndex 
 	}
 	writeColoredKey(lw, argKeyName(pairIndex), palette.Key, false)
 	lw.writeByte(':')
-	color := jsonColorForValue(value, palette)
-	if !writeRuntimeValueColorInline(lw, value, color) {
-		if !writeRuntimeValueColor(lw, value, color) {
-			writeColoredValue(lw, value, color)
-		}
-	}
+	writeRuntimeJSONValueColor(lw, value, palette)
 }
 
 func writeColoredKey(lw *lineWriter, key string, color string, trusted bool) {
@@ -540,18 +533,13 @@ func writeColoredKey(lw *lineWriter, key string, color string, trusted bool) {
 	writePTJSONStringColored(lw, color, key)
 }
 
-func writeColoredValue(lw *lineWriter, value any, color string) {
-	if !writePTLogValueColoredFast(lw, value, color) {
-		writePTLogValueColored(lw, value, color)
-	}
-}
-
-func encodeBaseJSONColor(fields []field, palette *ansi.Palette) []byte {
+func encodeBaseJSONColor(fields []field, palette *ansi.Palette, floatPolicy NonFiniteFloatPolicy) []byte {
 	if len(fields) == 0 {
 		return nil
 	}
 	lw := acquireLineWriter(io.Discard)
 	lw.autoFlush = false
+	lw.floatPolicy = floatPolicy
 	for _, f := range fields {
 		if f.key == "" {
 			continue
@@ -559,7 +547,7 @@ func encodeBaseJSONColor(fields []field, palette *ansi.Palette) []byte {
 		lw.writeByte(',')
 		writeColoredKey(lw, f.key, palette.Key, f.trustedKey)
 		lw.writeByte(':')
-		writeColoredValue(lw, f.value, jsonColorForValue(f.value, palette))
+		writeRuntimeJSONValueColor(lw, f.value, palette)
 	}
 	data := append([]byte(nil), lw.buf...)
 	releaseLineWriter(lw)
@@ -583,26 +571,82 @@ func writeColoredJSONString(lw *lineWriter, value string, color string) {
 	writePTJSONStringColored(lw, color, value)
 }
 
-func jsonColorForValue(value any, palette *ansi.Palette) string {
-	switch value.(type) {
-	case error:
-		return palette.Error
-	case TrustedString, string, time.Duration, []byte:
-		return palette.String
-	case time.Time:
-		return palette.Timestamp
-	case stringer:
-		return palette.String
+func writeRuntimeJSONValueColor(lw *lineWriter, value any, palette *ansi.Palette) {
+	switch v := value.(type) {
+	case TrustedString:
+		writePTJSONStringTrustedColored(lw, palette.String, string(v))
+	case string:
+		writePTJSONStringColored(lw, palette.String, v)
 	case bool:
-		return palette.Bool
-	case int, int8, int16, int32, int64,
-		uint, uint8, uint16, uint32, uint64, uintptr,
-		float32, float64:
-		return palette.Num
+		writeJSONBoolColored(lw, v, palette.Bool)
+	case int:
+		writeJSONNumberColored(lw, int64(v), palette.Num)
+	case int8:
+		writeJSONNumberColored(lw, int64(v), palette.Num)
+	case int16:
+		writeJSONNumberColored(lw, int64(v), palette.Num)
+	case int32:
+		writeJSONNumberColored(lw, int64(v), palette.Num)
+	case int64:
+		writeJSONNumberColored(lw, v, palette.Num)
+	case uint:
+		writeJSONUintColored(lw, uint64(v), palette.Num)
+	case uint8:
+		writeJSONUintColored(lw, uint64(v), palette.Num)
+	case uint16:
+		writeJSONUintColored(lw, uint64(v), palette.Num)
+	case uint32:
+		writeJSONUintColored(lw, uint64(v), palette.Num)
+	case uint64:
+		writeJSONUintColored(lw, v, palette.Num)
+	case uintptr:
+		writeJSONUintColored(lw, uint64(v), palette.Num)
+	case float32:
+		writeJSONFloatColored(lw, float64(v), palette.Num)
+	case float64:
+		writeJSONFloatColored(lw, v, palette.Num)
+	case []byte:
+		s := string(v)
+		if stringTrustedASCII(s) {
+			writePTJSONStringTrustedColored(lw, palette.String, s)
+		} else {
+			writePTJSONStringColored(lw, palette.String, s)
+		}
+	case time.Time:
+		writePTJSONStringTrustedColored(lw, palette.Timestamp, lw.formatTimeRFC3339(v))
+	case time.Duration:
+		writePTJSONStringTrustedColored(lw, palette.String, lw.formatDuration(v))
+	case stringer:
+		s := v.String()
+		color := palette.String
+		if _, isError := value.(error); isError {
+			color = palette.Error
+		}
+		if stringTrustedASCII(s) {
+			writePTJSONStringTrustedColored(lw, color, s)
+		} else {
+			writePTJSONStringColored(lw, color, s)
+		}
+	case error:
+		s := v.Error()
+		if stringTrustedASCII(s) {
+			writePTJSONStringTrustedColored(lw, palette.Error, s)
+		} else {
+			writePTJSONStringColored(lw, palette.Error, s)
+		}
 	case nil:
-		return palette.Nil
+		if palette.Nil == "" {
+			lw.writeString("null")
+			return
+		}
+		lw.reserve(len(palette.Nil) + len("null") + len(ansi.Reset))
+		lw.buf = append(lw.buf, palette.Nil...)
+		lw.buf = append(lw.buf, 'n', 'u', 'l', 'l')
+		lw.buf = append(lw.buf, ansi.Reset...)
+		lw.maybeFlush()
 	default:
-		return ""
+		// Preserve previous behaviour for unknown/runtime-marshal values: no color.
+		writePTLogValue(lw, value)
 	}
 }
 

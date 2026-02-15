@@ -26,7 +26,7 @@ It is not responsible for generating logs or maintaining the core `pslog` librar
 ### Control and Data Flow
 
 1. Parse flags, validate combinations (`-i`, `-o`, `-outdir`, `-l`, `-or`).
-2. Build selector filter and initialize type tracker.
+2. Build selector filter.
 3. For each line:
    - strip ANSI,
    - parse timestamp prefix (epoch/DTG/layout table),
@@ -36,43 +36,39 @@ It is not responsible for generating logs or maintaining the core `pslog` librar
    - apply filter,
    - emit ordered JSON object (`ts`, `lvl`, `msg`, fields...).
 
+`typeTracker` is scoped per `processReader` stream.
+
 ### Invariants and Error Handling
 
 - Invalid lines and parse errors are warned to stderr and skipped (`pslogconsole2json/main.go:392` to `pslogconsole2json/main.go:395`).
-- Parser is permissive: malformed tail content in `parseFields` can end parsing without explicit error (`pslogconsole2json/main.go:551` to `pslogconsole2json/main.go:553`).
-- Type inference currently persists for all processed input paths in a single invocation (`pslogconsole2json/main.go:325`, `pslogconsole2json/main.go:340`).
+- Parser now returns explicit errors for malformed field tails (`parseFields`), and the reader pipeline surfaces those as line warnings.
+- Type inference is isolated per input stream (`typeTracker` created in `processReader`).
 
 ### Test and Observability Coverage
 
-- There are no tests in this module currently (`pslogconsole2json/` contains `main.go`, `README.md`, `go.mod`, `go.sum` only).
+- Coverage now exists for parser primitives and end-to-end conversion:
+  - `main_test.go` unit tests for `typeTracker`, DTG parsing, field parsing, line parsing, filtering, ordered JSON output.
+  - fixture-backed integration tests using `testdata/generated_console_matrix.txt`.
 - Observability is stderr warnings via `warnf` (`pslogconsole2json/main.go:902`).
 
 ## Quality Improvements (Non-Style, Non-New-Feature)
 
 1. Isolate type inference state per input stream
-   - Problem: a single `typeTracker` instance is reused for all input files, so field types observed in one file influence parsing in subsequent files.
-   - Evidence: tracker initialized once (`pslogconsole2json/main.go:325`) and passed to each `processFile` call in loop (`pslogconsole2json/main.go:335`, `pslogconsole2json/main.go:340`).
-   - Impact: Data consistency risk when heterogeneous logs are processed together.
-   - Fix direction: create per-file tracker (or optional global-tracker mode) and document behavior.
-   - Verification: multi-file tests with conflicting key types asserting independent outputs.
+   - Status: Done.
+   - Behavior: `typeTracker` is created per `processReader` invocation.
+   - Verification: `TestProcessReader` in `main_test.go`.
 2. Correct DTG date normalization semantics
-   - Problem: DTG parser constructs date with current year/month and token day; invalid day/month combinations silently roll over via `time.Date`.
-   - Evidence: `parseDTG` checks day `1..31` only, then builds with `time.Date` (`pslogconsole2json/main.go:793` to `pslogconsole2json/main.go:801`).
-   - Impact: Correctness risk (wrong timestamp month/day) near month boundaries.
-   - Fix direction: validate day against actual month length and introduce bounded rollover strategy for operational logs crossing month transitions.
-   - Verification: unit tests for short-month invalid days and month-boundary rollover expectations.
+   - Status: Done.
+   - Behavior: DTG parser validates day against actual month length before `time.Date` construction.
+   - Verification: `TestParseDTG` in `main_test.go`.
 3. Fail loud on malformed field tails instead of silent truncation
-   - Problem: malformed field tokens currently terminate parsing without explicit error in several branches.
-   - Evidence: `parseFields` `break` paths at `pslogconsole2json/main.go:551`, `pslogconsole2json/main.go:557`.
-   - Impact: Reliability risk from silent partial ingestion.
-   - Fix direction: return explicit parse errors for malformed key/value segments and include line/offset in warning output.
-   - Verification: parser unit tests with malformed tokens asserting warning/error behavior and predictable partial output policy.
+   - Status: Done.
+   - Behavior: malformed field tails now return explicit parse errors from `parseFields`.
+   - Verification: `TestParseFields` and `TestParseConsoleLine` in `main_test.go`.
 4. Build comprehensive tests for parser and pipeline
-   - Problem: module has no executable verification signal today.
-   - Evidence: no `*_test.go` files under `pslogconsole2json/`.
-   - Impact: High regression risk for parsing and filter semantics.
-   - Fix direction: add unit tests for tokenizer/parsers and integration tests for end-to-end conversion/filtering.
-   - Verification: `cd pslogconsole2json && go test ./...` plus fixture-based smoke tests in CI.
+   - Status: Done.
+   - Behavior: module now includes unit + fixture-backed integration coverage.
+   - Verification: `pslogconsole2json/main_test.go`.
 
 ## Feature Improvements (Optional, Aligned to Existing Feature Set)
 

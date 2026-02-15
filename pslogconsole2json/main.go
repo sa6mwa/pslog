@@ -322,11 +322,10 @@ func main() {
 		fatalf("invalid selector: %v", err)
 	}
 
-	tracker := newTypeTracker()
 	now := time.Now()
 
 	if inputStdin {
-		if err := processReader(os.Stdin, "stdin", os.Stdout, tracker, filter, now); err != nil {
+		if err := processReader(os.Stdin, "stdin", os.Stdout, filter, now); err != nil {
 			fatalf("%v", err)
 		}
 		return
@@ -337,7 +336,7 @@ func main() {
 		if err != nil {
 			fatalf("%v", err)
 		}
-		if err := processFile(path, out, tracker, filter, now); err != nil {
+		if err := processFile(path, out, filter, now); err != nil {
 			_ = closeOutput(out, writeFiles)
 			fatalf("%v", err)
 		}
@@ -372,18 +371,19 @@ func closeOutput(w io.Writer, writeFiles bool) error {
 	return nil
 }
 
-func processFile(path string, out io.Writer, tracker *typeTracker, filter selectorFilter, now time.Time) error {
+func processFile(path string, out io.Writer, filter selectorFilter, now time.Time) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", path, err)
 	}
 	defer file.Close()
-	return processReader(file, path, out, tracker, filter, now)
+	return processReader(file, path, out, filter, now)
 }
 
-func processReader(r io.Reader, name string, out io.Writer, tracker *typeTracker, filter selectorFilter, now time.Time) error {
+func processReader(r io.Reader, name string, out io.Writer, filter selectorFilter, now time.Time) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
+	tracker := newTypeTracker()
 	lineNo := 0
 	for scanner.Scan() {
 		lineNo++
@@ -548,13 +548,16 @@ func parseFields(line string, tracker *typeTracker) ([]fieldPair, error) {
 		for i < len(line) && line[i] != '=' && line[i] != ' ' {
 			i++
 		}
-		if i >= len(line) || line[i] != '=' {
-			break
+		if i >= len(line) || line[i] == ' ' {
+			return nil, fmt.Errorf("malformed field tail: missing '=' after %q", line[start:i])
+		}
+		if line[i] != '=' {
+			return nil, fmt.Errorf("malformed field tail near %q", line[start:i])
 		}
 		key := line[start:i]
 		i++
 		if key == "" {
-			break
+			return nil, errors.New("malformed field tail: empty field key")
 		}
 		if i >= len(line) {
 			fields = append(fields, fieldPair{key: key, value: tracker.parseValue(key, "", false)})
@@ -790,15 +793,26 @@ func parseDTG(token string, now time.Time) (string, bool) {
 	day, _ := strconv.Atoi(token[0:2])
 	hour, _ := strconv.Atoi(token[2:4])
 	min, _ := strconv.Atoi(token[4:6])
-	if day < 1 || day > 31 || hour > 23 || min > 59 {
+	if day < 1 || hour > 23 || min > 59 {
 		return "", false
 	}
 	location := time.Local
 	if now.Location() != nil {
 		location = now.Location()
 	}
+	lastDay := daysInMonth(now.Year(), now.Month(), location)
+	if day > lastDay {
+		return "", false
+	}
 	parsed := time.Date(now.Year(), now.Month(), day, hour, min, 0, 0, location)
 	return parsed.Format(time.RFC3339Nano), true
+}
+
+func daysInMonth(year int, month time.Month, location *time.Location) int {
+	if location == nil {
+		location = time.Local
+	}
+	return time.Date(year, month+1, 0, 0, 0, 0, 0, location).Day()
 }
 
 type tokenSpan struct {

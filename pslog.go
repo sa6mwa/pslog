@@ -184,6 +184,10 @@ type Options struct {
 	// When nil, pslog uses ansi.PaletteDefault.
 	Palette *ansi.Palette
 
+	// NonFiniteFloatPolicy controls JSON serialization for NaN/+Inf/-Inf.
+	// Default is NonFiniteFloatAsString for backward compatibility.
+	NonFiniteFloatPolicy NonFiniteFloatPolicy
+
 	// MinLevel sets the minimum level the adapter will emit. Defaults to Debug.
 	MinLevel Level
 

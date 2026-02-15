@@ -34,13 +34,19 @@ It is not responsible for low-level encoding internals (console/json emission lo
 
 - Missing/invalid env values generally preserve seeded options (for example parse checks in `pslog_fromenv.go:61`, `pslog_fromenv.go:81`, `pslog_fromenv.go:91`).
 - `LoggerFromEnv` falls back to base writer on output open failure and emits a structured error event (`pslog_fromenv.go:115`, `pslog_fromenv.go:123`).
-- Writer close behavior is best-effort via `closeOutput`, with no ownership tracking across cloned loggers (`logger_close.go:8`).
+- Writer close behavior uses explicit ownership semantics:
+  - user-provided writers are not closed by logger `Close`,
+  - env-opened outputs are wrapped as owned outputs and closed once,
+  - shared runtime components (for example `timeCache`) are closed by owning logger only (`logger_close.go`, `owned_output.go`).
 
 ### Test and Observability Coverage
 
 - Strong env configuration coverage in `logger_from_env_test.go:15` and `pslog_fromenv_internal_test.go:12`.
+- Close ownership and shared-runtime close semantics are covered in:
+  - `close_ownership_test.go`,
+  - `observed_writer_test.go`,
+  - `timecache_test.go`.
 - Gaps:
-  - No ownership/lifetime tests for closing shared writers across cloned loggers.
   - No explicit tests for write-failure observability in runtime logging paths.
 
 ## Quality Improvements (Non-Style, Non-New-Feature)
@@ -52,17 +58,17 @@ It is not responsible for low-level encoding internals (console/json emission lo
    - Fix direction: propagate `Write` errors through `commit`/`log` path (or emit to an explicit error hook/metric) and make behavior deterministic under failure.
    - Verification: add failing-writer unit tests (for each logger mode) asserting failures are surfaced and do not panic.
 2. Add explicit output ownership semantics for `Close`
-   - Problem: Cloned loggers share the same underlying writer yet every clone exposes `Close`, allowing accidental early close of shared output.
-   - Evidence: cloning keeps writer in copied config (`json_plain.go:107`, `console_plain.go:78`); `Close` delegates directly to `closeOutput` (`json_plain.go:164`, `console_plain.go:135`, `logger_close.go:8`).
-   - Impact: Reliability risk (silent write loss after one clone closes shared output).
-   - Fix direction: introduce shared output handle with `sync.Once` close and ownership rules (for example root-owning logger only), plus docs for contract.
-   - Verification: tests covering clone/close interleavings and post-close write behavior.
+   - Status: Done.
+   - Behavior:
+     - `closeLoggerRuntime` enforces owner-only `timeCache` shutdown.
+     - owned outputs use a `sync.Once`-guarded closer.
+     - `Close` on clone no longer tears down shared runtime owned by root logger.
+   - Verification: `close_ownership_test.go`, `observed_writer_test.go`, `timecache_test.go`.
 3. Tighten default file permissions for env-selected output files
-   - Problem: `LoggerFromEnv` creates log files with mode `0644`.
-   - Evidence: `openLogOutputFile` uses `os.OpenFile(..., 0o644)` in `pslog_fromenv.go:218`.
-   - Impact: Security exposure for logs that may contain sensitive values.
-   - Fix direction: default to restrictive permissions (for example `0600`) with explicit opt-out for shared-read deployments.
-   - Verification: unit tests asserting created mode bits and backward-compatibility behavior when opt-out is enabled.
+   - Status: Done. `LoggerFromEnv` now defaults new output files to mode `0600`.
+   - Behavior: `OUTPUT_FILE_MODE` controls file creation mode for env-output paths.
+   - Guardrail: invalid `OUTPUT_FILE_MODE` values fall back to `0600` and emit `logger.output.file_mode.invalid`.
+   - Verification: unit tests in `pslog_fromenv_internal_test.go` and `logger_from_env_test.go` validate default and override behavior.
 
 ## Feature Improvements (Optional, Aligned to Existing Feature Set)
 

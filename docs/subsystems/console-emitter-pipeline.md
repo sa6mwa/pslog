@@ -43,23 +43,20 @@ It is not responsible for logger construction policy, env parsing, or JSON emiss
   - `console_color_internal_test.go`,
   - `console_variants_test.go`,
   - `console_message_escape_test.go`,
-  - `logger_variants_test.go`.
-- Gap: no differential fuzz/property tests asserting fast-path and slow-path semantic equivalence under arbitrary key/value shapes.
+  - `logger_variants_test.go`,
+  - `console_runtime_parity_test.go`.
+- Gap: no fuzz/property suite that randomizes fast/slow path parity across arbitrary key/value shapes.
 
 ## Quality Improvements (Non-Style, Non-New-Feature)
 
 1. Prevent persistent over-allocation from one-off long lines
-   - Problem: `lineHint` in console loggers only grows (max), so a single pathological line can permanently inflate preallocation for later normal lines.
-   - Evidence: `recordHint` only stores when `n > current` (`console_plain.go:68`, `console_color.go:102`), and preallocation consumes this hint (`console_plain.go:56`, `console_color.go:90`).
-   - Impact: Performance/memory regression under bursty high-cardinality messages.
-   - Fix direction: switch to bounded/decaying estimate (for example EWMA or clamp with upper percentile cap).
-   - Verification: targeted benchmark/test that logs one huge line followed by many small lines and asserts allocation profile stabilizes.
+   - Status: Done.
+   - Behavior: `lineHint` uses bounded/decaying updates (`updateLineHint`) instead of max-only growth, preventing persistent preallocation inflation after outliers.
+   - Verification: `console_hint_test.go`.
 2. Add parity tests between fast and slow runtime field encoders
-   - Problem: Two independent runtime paths encode equivalent conceptual data; drift can introduce mode-dependent behavior.
-   - Evidence: separate implementations in `writeRuntimeConsolePlainFast/Slow` and `writeRuntimeConsoleColorFast/Slow` (`console_plain.go:172`, `console_plain.go:212`, `console_color.go:189`, `console_color.go:225`).
-   - Impact: Correctness risk (field rendering inconsistencies) and hard-to-debug regressions.
-   - Fix direction: differential tests/fuzzers that feed mixed key/value shapes and compare normalized output for parity.
-   - Verification: property tests plus fuzz corpus for odd key counts, non-string keys, and escaped values.
+   - Status: Done (targeted parity coverage).
+   - Behavior: explicit parity tests validate wrapper/fast/slow output equivalence for plain and color runtime field encoders.
+   - Verification: `console_runtime_parity_test.go`.
 3. Add explicit tests for write failure behavior in console mode
    - Problem: Console pipeline currently has no assertions around downstream writer failure behavior.
    - Evidence: log path flushes through `lineWriter.commit` (`console_plain.go:63`, `console_color.go:97`) and `writer.go:287` currently discards write errors.

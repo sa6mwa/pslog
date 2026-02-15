@@ -28,39 +28,35 @@ It is not responsible for API-level option parsing or mode-specific envelope for
 ### Control and Data Flow
 
 1. Loggers acquire a pooled `lineWriter` for each entry, encode data into `buf`, then flush and release.
-2. For cacheable layouts, timestamp retrieval calls `timeCache.Current`, which lazily starts a refresher goroutine.
-3. Colored emitters read ANSI semantic globals at write time (for example `ansi.Key`, `ansi.Message`, `ansi.Timestamp`).
-4. Close behavior delegates to `closeOutput`, which closes any non-stdout/stderr writer implementing `Close`.
+2. For cacheable layouts, logger construction creates a `timeCache` and starts its refresher loop.
+3. Colored emitters use logger-held palette pointers resolved at construction (`Options.Palette` or `ansi.PaletteDefault`), avoiding global ANSI lookups on hot write paths.
+4. Close behavior routes through runtime ownership helpers so shared caches are shutdown by owners and owned outputs are closed once.
 
 ### Invariants and Error Handling
 
 - `lineWriter` buffer capacity is bounded by reset logic (`writer.go:78` to `writer.go:82`) but write failures are currently ignored.
-- `timeCache` refresh loop assumes long-lived process lifecycle and lacks explicit shutdown.
-- ANSI palette state is process-global mutable state.
+- `timeCache` supports explicit shutdown via `Close`; shutdown is idempotent and wired to logger close ownership rules.
+- ANSI package-level palette values remain mutable global state, but active loggers use explicit palette references and `ansi.SetPalette` writes are lock-protected.
 
 ### Test and Observability Coverage
 
 - Timestamp cache behavior and cacheability are tested in `timecache_test.go:9`.
 - Terminal probing has OS-specific tests in `internal/istty/*_test.go`.
+- Cache lifecycle and owner-close semantics are covered in `timecache_test.go` and `close_ownership_test.go`.
+- Concurrent palette swap under active logging is covered in `palette_race_test.go`.
 - Gaps:
-  - no goroutine lifecycle test for `timeCache` teardown,
-  - no race-oriented test around concurrent palette mutation and emission,
   - no tests asserting behavior under writer failures.
 
 ## Quality Improvements (Non-Style, Non-New-Feature)
 
 1. Add a stoppable lifecycle for `timeCache` refresh goroutines
-   - Problem: `Current` launches `go c.refresh()`, and `refresh` ranges ticker channel indefinitely.
-   - Evidence: goroutine start in `timecache.go:87`; loop in `timecache.go:101`; default ticker stop does not close channel (`timecache.go:75` to `timecache.go:80`).
-   - Impact: Reliability/resource leak risk when many short-lived loggers are created.
-   - Fix direction: add cancellation (context or done channel), call stop on close, and wire logger close to cache shutdown.
-   - Verification: goroutine-count/lifecycle tests plus deterministic fake ticker tests.
+   - Status: Done.
+   - Behavior: `timeCache` has explicit stop channel + idempotent `Close`, and logger runtime close wires owner-only cache shutdown.
+   - Verification: `timecache_test.go` lifecycle and concurrent-close coverage.
 2. Make ANSI palette access concurrency-safe
-   - Problem: color globals are mutable process-wide vars updated without synchronization.
-   - Evidence: mutable globals in `ansi/ansi.go:30`; unsynchronized writes in `ansi/ansi.go:86`.
-   - Impact: Data race risk and inconsistent color output under concurrent `SetPalette` + logging.
-   - Fix direction: move to immutable palette snapshot with atomic pointer swap, and let loggers capture palette references safely.
-   - Verification: `-race` tests with concurrent logging and palette updates.
+   - Status: Done.
+   - Behavior: `ansi.SetPalette` uses locking and loggers resolve/store palette pointers at construction, so runtime emission avoids global palette mutation reads.
+   - Verification: concurrent swap test in `palette_race_test.go`.
 3. Define and implement write error handling semantics in runtime flush
    - Problem: flush drops write errors.
    - Evidence: `writer.go:287` ignores write error.

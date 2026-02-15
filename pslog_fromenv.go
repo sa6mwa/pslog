@@ -10,6 +10,8 @@ import (
 	"pkt.systems/pslog/ansi"
 )
 
+const defaultOutputFileMode os.FileMode = 0o600
+
 // LoggerFromEnvOption customizes LoggerFromEnv behavior.
 type LoggerFromEnvOption func(*loggerFromEnvConfig)
 
@@ -45,8 +47,9 @@ func WithEnvWriter(w io.Writer) LoggerFromEnvOption {
 //
 // Recognised variables are: {prefix}LEVEL, VERBOSE_FIELDS, CALLER_KEYVAL,
 // CALLER_KEY, MODE (console|structured|json), TIME_FORMAT, DISABLE_TIMESTAMP,
-// NO_COLOR, FORCE_COLOR, PALETTE, UTC, and OUTPUT. OUTPUT accepts stdout, stderr,
-// default, a file path, or stdout+/stderr+/default+<path> to tee.
+// NO_COLOR, FORCE_COLOR, PALETTE, UTC, OUTPUT, and OUTPUT_FILE_MODE.
+// OUTPUT accepts stdout, stderr, default, a file path, or stdout+/stderr+/default+<path> to
+// tee. OUTPUT_FILE_MODE sets the mode for newly created output files.
 func LoggerFromEnv(opts ...LoggerFromEnvOption) Logger {
 	cfg := loggerFromEnvConfig{prefix: "LOG_"}
 	for _, opt := range opts {
@@ -113,11 +116,22 @@ func LoggerFromEnv(opts ...LoggerFromEnvOption) Logger {
 			resolvedOpts.UTC = parsed
 		}
 	}
+	outputFileMode := defaultOutputFileMode
+	outputFileModeValue := ""
+	var outputFileModeErr error
+	if value, ok := lookupEnv(prefix, "OUTPUT_FILE_MODE"); ok {
+		outputFileModeValue = strings.TrimSpace(value)
+		if parsed, ok := parseEnvFileMode(value); ok {
+			outputFileMode = parsed
+		} else {
+			outputFileModeErr = fmt.Errorf("invalid OUTPUT_FILE_MODE %q (expected octal permissions in range 0000-0777)", outputFileModeValue)
+		}
+	}
 	outputValue, hasOutput := lookupEnv(prefix, "OUTPUT")
 	writer := baseWriter
 	var outputErr error
 	if hasOutput {
-		if resolved, err := writerFromEnvOutput(outputValue, baseWriter); err != nil {
+		if resolved, err := writerFromEnvOutput(outputValue, baseWriter, outputFileMode); err != nil {
 			outputErr = err
 			writer = baseWriter
 		} else {
@@ -125,6 +139,9 @@ func LoggerFromEnv(opts ...LoggerFromEnvOption) Logger {
 		}
 	}
 	logger := NewWithOptions(writer, resolvedOpts)
+	if outputFileModeErr != nil {
+		logger.With(outputFileModeErr).Error("logger.output.file_mode.invalid", "output_file_mode", outputFileModeValue)
+	}
 	if outputErr != nil {
 		logger.With(outputErr).Error("logger.output.open.failed", "output", strings.TrimSpace(outputValue))
 	}
@@ -157,7 +174,34 @@ func parseEnvMode(value string) (Mode, bool) {
 	}
 }
 
-func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
+func parseEnvFileMode(value string) (os.FileMode, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return 0, false
+	}
+	if strings.HasPrefix(trimmed, "0o") || strings.HasPrefix(trimmed, "0O") {
+		trimmed = trimmed[2:]
+	}
+	if trimmed == "" {
+		return 0, false
+	}
+	for _, r := range trimmed {
+		if r < '0' || r > '7' {
+			return 0, false
+		}
+	}
+	parsed, err := strconv.ParseUint(trimmed, 8, 32)
+	if err != nil {
+		return 0, false
+	}
+	mode := os.FileMode(parsed)
+	if mode > 0o777 {
+		return 0, false
+	}
+	return mode, true
+}
+
+func writerFromEnvOutput(value string, base io.Writer, outputFileMode os.FileMode) (io.Writer, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return base, nil
@@ -185,7 +229,7 @@ func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
 		if path == "" {
 			return os.Stdout, nil
 		}
-		fileWriter, err := openLogOutputFile(path)
+		fileWriter, err := openLogOutputFile(path, outputFileMode)
 		if err != nil {
 			return base, err
 		}
@@ -195,7 +239,7 @@ func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
 		if path == "" {
 			return os.Stderr, nil
 		}
-		fileWriter, err := openLogOutputFile(path)
+		fileWriter, err := openLogOutputFile(path, outputFileMode)
 		if err != nil {
 			return base, err
 		}
@@ -205,13 +249,13 @@ func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
 		if path == "" {
 			return base, nil
 		}
-		fileWriter, err := openLogOutputFile(path)
+		fileWriter, err := openLogOutputFile(path, outputFileMode)
 		if err != nil {
 			return base, err
 		}
 		return newOwnedOutput(newTeeWriter(base, fileWriter), fileWriter), nil
 	default:
-		fileWriter, err := openLogOutputFile(trimmed)
+		fileWriter, err := openLogOutputFile(trimmed, outputFileMode)
 		if err != nil {
 			return base, err
 		}
@@ -219,8 +263,8 @@ func writerFromEnvOutput(value string, base io.Writer) (io.Writer, error) {
 	}
 }
 
-func openLogOutputFile(path string) (*os.File, error) {
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+func openLogOutputFile(path string, outputFileMode os.FileMode) (*os.File, error) {
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, outputFileMode)
 	if err != nil {
 		return nil, fmt.Errorf("open log output %q: %w", path, err)
 	}

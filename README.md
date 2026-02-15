@@ -210,6 +210,7 @@ Recognised variables (default prefix `LOG_`):
 - `LOG_CALLER_KEYVAL` (bool)
 - `LOG_CALLER_KEY`
 - `LOG_OUTPUT` (`stdout|stderr|default|/path/to/file.log|stdout+/path|stderr+/path|default+/path`)
+- `LOG_OUTPUT_FILE_MODE` (octal permissions for newly-created output files, default `0600`; accepted range `0000`-`0777` with optional `0o` prefix, invalid values fall back to `0600` and emit `logger.output.file_mode.invalid`)
 
 Example:
 
@@ -228,6 +229,15 @@ logger := pslog.NewWithOptions(os.Stdout, pslog.Options{
 	Palette: &ansi.PaletteOneDark,
 })
 logger.Info("ready")
+```
+
+JSON non-finite float handling is configurable:
+
+```go
+logger := pslog.NewWithOptions(os.Stdout, pslog.Options{
+	Mode:                 pslog.ModeStructured,
+	NonFiniteFloatPolicy: pslog.NonFiniteFloatAsNull, // or NonFiniteFloatAsString
+})
 ```
 
 ## Testing

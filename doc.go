@@ -77,6 +77,8 @@
 //   - Use Logger.LogLevel to derive loggers with different minimum levels.
 //   - Set Options.Palette to a *ansi.Palette (or use NewWithPalette) to select
 //     color palettes.
+//   - Set Options.NonFiniteFloatPolicy to control JSON serialization of
+//     NaN/+Inf/-Inf (string or null).
 //   - The ansi subpackage also exposes palette lookup helpers
 //     (ansi.PaletteByName and ansi.AvailablePaletteNames).
 //   - pslog.LogLogger bridges to the standard library by returning a *log.Logger

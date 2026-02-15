@@ -67,13 +67,7 @@ func (l *consolePlainLogger) log(level Level, msg string, keyvals ...any) {
 }
 
 func (l *consolePlainLogger) recordHint(n int) {
-	if n <= 0 || l.lineHint == nil {
-		return
-	}
-	current := l.lineHint.Load()
-	if n > int(current) {
-		l.lineHint.Store(int64(n))
-	}
+	updateLineHint(l.lineHint, n)
 }
 
 func (l *consolePlainLogger) With(keyvals ...any) Logger {
@@ -164,9 +158,11 @@ func encodeConsoleFieldsPlain(fields []field) []byte {
 }
 
 func writeRuntimeConsolePlain(lw *lineWriter, keyvals []any) {
+	start := len(lw.buf)
 	if writeRuntimeConsolePlainFast(lw, keyvals) {
 		return
 	}
+	lw.buf = lw.buf[:start]
 	writeRuntimeConsolePlainSlow(lw, keyvals)
 }
 

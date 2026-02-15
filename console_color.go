@@ -104,13 +104,7 @@ func (l *consoleColorLogger) log(level Level, msg string, keyvals ...any) {
 }
 
 func (l *consoleColorLogger) recordHint(n int) {
-	if n <= 0 || l.lineHint == nil {
-		return
-	}
-	current := l.lineHint.Load()
-	if n > int(current) {
-		l.lineHint.Store(int64(n))
-	}
+	updateLineHint(l.lineHint, n)
 }
 
 func (l *consoleColorLogger) With(keyvals ...any) Logger {
@@ -184,9 +178,11 @@ func (l *consoleColorLogger) rebuildBaseBytes() {
 }
 
 func writeRuntimeConsoleColor(lw *lineWriter, keyvals []any, palette *ansi.Palette) {
+	start := len(lw.buf)
 	if writeRuntimeConsoleColorFast(lw, keyvals, palette) {
 		return
 	}
+	lw.buf = lw.buf[:start]
 	writeRuntimeConsoleColorSlow(lw, keyvals, palette)
 }
 
@@ -211,17 +207,13 @@ func writeRuntimeConsoleColorFast(lw *lineWriter, keyvals []any, palette *ansi.P
 		}
 		writeConsoleKeyColor(lw, key, palette)
 		value := keyvals[i+1]
-		if !writeConsoleValueColorInline(lw, value, palette) {
-			writeConsoleValueColor(lw, value, palette)
-		}
+		writeConsoleValueColorInline(lw, value, palette)
 		pair++
 	}
 	if len(keyvals)%2 != 0 {
 		writeConsoleKeyColor(lw, argKeyName(pair), palette)
 		value := keyvals[len(keyvals)-1]
-		if !writeConsoleValueColorInline(lw, value, palette) {
-			writeConsoleValueColor(lw, value, palette)
-		}
+		writeConsoleValueColorInline(lw, value, palette)
 	}
 	return true
 }
@@ -239,17 +231,13 @@ func writeRuntimeConsoleColorSlow(lw *lineWriter, keyvals []any, palette *ansi.P
 		}
 		writeConsoleKeyColor(lw, key, palette)
 		value := keyvals[i+1]
-		if !writeConsoleValueColorFast(lw, value, palette) {
-			writeConsoleValueColor(lw, value, palette)
-		}
+		writeConsoleValueColorInline(lw, value, palette)
 		pair++
 	}
 	if len(keyvals)%2 != 0 {
 		writeConsoleKeyColor(lw, argKeyName(pair), palette)
 		value := keyvals[len(keyvals)-1]
-		if !writeConsoleValueColorFast(lw, value, palette) {
-			writeConsoleValueColor(lw, value, palette)
-		}
+		writeConsoleValueColorInline(lw, value, palette)
 	}
 }
 
@@ -679,13 +667,17 @@ func writeConsoleValueColorInline(lw *lineWriter, value any, palette *ansi.Palet
 	case nil:
 		writeConsoleStringColor(lw, "nil", palette.Nil)
 		return true
+	default:
+		writePTLogValueColored(lw, v, palette.String)
+		return true
 	}
-	return false
 }
 
 func writeConsoleValueColor(lw *lineWriter, value any, palette *ansi.Palette) {
 
 	switch v := value.(type) {
+	case TrustedString:
+		writeConsoleStringColor(lw, string(v), palette.String)
 	case string:
 		writeConsoleStringColor(lw, v, palette.String)
 	case time.Time:

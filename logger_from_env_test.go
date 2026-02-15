@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -350,6 +351,68 @@ func TestLoggerFromEnvOutputFile(t *testing.T) {
 	}
 }
 
+func TestLoggerFromEnvOutputFileModeDefault(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file mode checks are platform-dependent on Windows")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app-default.log")
+	t.Setenv("PSLOG_TEST_OUTPUT", path)
+
+	var buf bytes.Buffer
+	logger := pslog.LoggerFromEnv(
+		pslog.WithEnvPrefix("PSLOG_TEST_"),
+		pslog.WithEnvWriter(&buf),
+		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
+	)
+
+	logger.Info("file_only")
+	closeLogger(t, logger)
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat file: %v", err)
+	}
+	const secureDefaultMode = 0o600
+	if got := info.Mode().Perm(); got&^secureDefaultMode != 0 {
+		t.Fatalf("unexpected default file mode: %o", got)
+	}
+}
+
+func TestLoggerFromEnvOutputFileModeOverride(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file mode checks are platform-dependent on Windows")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.log")
+	t.Setenv("PSLOG_TEST_OUTPUT", path)
+	t.Setenv("PSLOG_TEST_OUTPUT_FILE_MODE", "0644")
+
+	var buf bytes.Buffer
+	logger := pslog.LoggerFromEnv(
+		pslog.WithEnvPrefix("PSLOG_TEST_"),
+		pslog.WithEnvWriter(&buf),
+		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
+	)
+
+	logger.Info("file_only")
+	closeLogger(t, logger)
+
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("expected buffer empty, got %q", got)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat file: %v", err)
+	}
+	const overrideMode = 0o644
+	if got := info.Mode().Perm(); got&^overrideMode != 0 {
+		t.Fatalf("expected file mode masked by umask from %o, got %o", overrideMode, got)
+	}
+}
+
 func TestLoggerFromEnvOutputDefaultKeepsSeed(t *testing.T) {
 	t.Setenv("PSLOG_TEST_OUTPUT", "default")
 
@@ -459,6 +522,48 @@ func TestLoggerFromEnvOutputFailure(t *testing.T) {
 	}
 	if !foundAfter {
 		t.Fatalf("expected logger to fall back and log subsequent entries")
+	}
+}
+
+func TestLoggerFromEnvOutputFileModeInvalid(t *testing.T) {
+	t.Setenv("PSLOG_TEST_OUTPUT_FILE_MODE", "0x1ff")
+
+	var buf bytes.Buffer
+	logger := pslog.LoggerFromEnv(
+		pslog.WithEnvPrefix("PSLOG_TEST_"),
+		pslog.WithEnvWriter(&buf),
+		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
+	)
+
+	logger.Info("after")
+
+	lines := collectLines(&buf)
+	foundInvalid := false
+	foundAfter := false
+	for _, line := range lines {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(line), &payload); err != nil {
+			t.Fatalf("invalid json output %q: %v", line, err)
+		}
+		msg, _ := payload["msg"].(string)
+		if msg == "logger.output.file_mode.invalid" {
+			foundInvalid = true
+			if payload["output_file_mode"] != "0x1ff" {
+				t.Fatalf("expected output_file_mode to be recorded, got %v", payload["output_file_mode"])
+			}
+			if _, ok := payload["error"]; !ok {
+				t.Fatalf("expected error field in %v", payload)
+			}
+		}
+		if msg == "after" {
+			foundAfter = true
+		}
+	}
+	if !foundInvalid {
+		t.Fatalf("expected invalid output file mode to be logged")
+	}
+	if !foundAfter {
+		t.Fatalf("expected subsequent entries after invalid output file mode")
 	}
 }
 
