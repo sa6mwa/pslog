@@ -11,7 +11,7 @@ import (
 
 func TestConsolePlainQuoting(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{
 		Mode:             pslog.ModeConsole,
 		DisableTimestamp: true,
 		NoColor:          true,
@@ -29,7 +29,7 @@ func TestConsolePlainQuoting(t *testing.T) {
 
 func TestConsoleColorQuoting(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{
 		Mode:             pslog.ModeConsole,
 		ForceColor:       true,
 		DisableTimestamp: true,
@@ -59,8 +59,8 @@ func TestConsoleColorMatchesPlain(t *testing.T) {
 		pslog.TrustedString("trusted_key"), pslog.TrustedString("trusted value"),
 	}
 
-	plain := pslog.NewWithOptions(&plainBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true})
-	color := pslog.NewWithOptions(&colorBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, ForceColor: true})
+	plain := pslog.NewWithOptions(nil, &plainBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true})
+	color := pslog.NewWithOptions(nil, &colorBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, ForceColor: true})
 
 	plain.Info("event", fields...)
 	color.Info("event", fields...)
@@ -88,8 +88,8 @@ func TestConsoleQuotingDelAndHighBit(t *testing.T) {
 
 	for _, tc := range cases {
 		var plainBuf, colorBuf bytes.Buffer
-		plain := pslog.NewWithOptions(&plainBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true})
-		color := pslog.NewWithOptions(&colorBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, ForceColor: true})
+		plain := pslog.NewWithOptions(nil, &plainBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true})
+		color := pslog.NewWithOptions(nil, &colorBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, ForceColor: true})
 
 		plain.Info("event", "value", tc.value)
 		color.Info("event", "value", tc.value)

@@ -31,7 +31,7 @@ func isNoopLogger(tb testing.TB, logger any) bool {
 
 func TestContextWithLoggerRoundTrip(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true})
+	logger := pslog.NewWithOptions(context.Background(), &buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true})
 
 	ctx := pslog.ContextWithLogger(nil, logger)
 	if ctx == nil {
@@ -103,7 +103,7 @@ func TestContextWithBaseLogger_StoresBaseOnly(t *testing.T) {
 
 func TestContextWithBaseLoggerWithPslogLogger(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true})
+	logger := pslog.NewWithOptions(context.Background(), &buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true})
 
 	ctx := pslog.ContextWithBaseLogger(nil, logger)
 	if ctx == nil {

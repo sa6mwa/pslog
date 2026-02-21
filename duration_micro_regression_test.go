@@ -44,7 +44,7 @@ func TestDurationMicroSignAllModes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf strings.Builder
-			logger := NewWithOptions(&buf, tc.opts)
+			logger := NewWithOptions(nil, &buf, tc.opts)
 			logger.Info("event", "duration", dur)
 
 			out := strings.TrimSpace(buf.String())

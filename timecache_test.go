@@ -50,7 +50,7 @@ func TestTimeCacheCloseStopsRefreshLoop(t *testing.T) {
 
 func TestLoggerCloseStopsOwnedTimeCache(t *testing.T) {
 	var buf strings.Builder
-	logger := NewWithOptions(&buf, Options{
+	logger := NewWithOptions(nil, &buf, Options{
 		Mode:       ModeStructured,
 		NoColor:    true,
 		TimeFormat: time.RFC3339,
@@ -80,7 +80,7 @@ func TestLoggerCloseStopsOwnedTimeCache(t *testing.T) {
 
 func TestLoggerCloneCloseDoesNotStopSharedTimeCache(t *testing.T) {
 	var buf strings.Builder
-	logger := NewWithOptions(&buf, Options{
+	logger := NewWithOptions(nil, &buf, Options{
 		Mode:       ModeStructured,
 		NoColor:    true,
 		TimeFormat: time.RFC3339,
@@ -238,7 +238,7 @@ func TestTimeCacheCloseReturnsQuicklyUnderTickerBackpressure(t *testing.T) {
 
 func TestLoggerConcurrentCloseAcrossClones(t *testing.T) {
 	var buf strings.Builder
-	root := NewWithOptions(&buf, Options{
+	root := NewWithOptions(nil, &buf, Options{
 		Mode:       ModeStructured,
 		NoColor:    true,
 		TimeFormat: time.RFC3339,
@@ -410,11 +410,11 @@ func TestIsCacheableLayoutRejectsSubSecondLayouts(t *testing.T) {
 
 func TestTimeCacheDisabledForSubSecondLayouts(t *testing.T) {
 	var firstBuf, secondBuf strings.Builder
-	logger := NewWithOptions(&firstBuf, Options{Mode: ModeStructured, TimeFormat: time.RFC3339Nano})
+	logger := NewWithOptions(nil, &firstBuf, Options{Mode: ModeStructured, TimeFormat: time.RFC3339Nano})
 	logger.Info("first")
 	firstLine := strings.TrimSuffix(firstBuf.String(), "\n")
 	time.Sleep(time.Millisecond)
-	logger = NewWithOptions(&secondBuf, Options{Mode: ModeStructured, TimeFormat: time.RFC3339Nano})
+	logger = NewWithOptions(nil, &secondBuf, Options{Mode: ModeStructured, TimeFormat: time.RFC3339Nano})
 	logger.Info("second")
 	secondLine := strings.TrimSuffix(secondBuf.String(), "\n")
 	if firstLine == secondLine {

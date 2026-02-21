@@ -112,7 +112,7 @@ func TestObservedWriterNormalizesShortWrite(t *testing.T) {
 
 func TestObservedWriterCloseOwnershipSemantics(t *testing.T) {
 	userWriter := &closeTrackingWriter{}
-	logger := NewWithOptions(NewObservedWriter(userWriter, nil), Options{
+	logger := NewWithOptions(nil, NewObservedWriter(userWriter, nil), Options{
 		Mode:             ModeStructured,
 		NoColor:          true,
 		DisableTimestamp: true,
@@ -132,7 +132,7 @@ func TestObservedWriterCloseOwnershipSemantics(t *testing.T) {
 
 	ownedWriter := &closeTrackingWriter{}
 	owned := newOwnedOutput(ownedWriter, ownedWriter)
-	ownedLogger := NewWithOptions(NewObservedWriter(owned, nil), Options{
+	ownedLogger := NewWithOptions(nil, NewObservedWriter(owned, nil), Options{
 		Mode:             ModeStructured,
 		NoColor:          true,
 		DisableTimestamp: true,

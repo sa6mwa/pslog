@@ -87,7 +87,7 @@ obs := pslog.NewObservedWriter(os.Stdout, func(f pslog.WriteFailure) {
 	// f.Err, f.Written, f.Attempted
 })
 
-logger := pslog.NewWithOptions(obs, pslog.Options{Mode: pslog.ModeStructured})
+logger := pslog.NewWithOptions(context.Background(), obs, pslog.Options{Mode: pslog.ModeStructured})
 logger.Info("ready")
 
 stats := obs.Stats() // cumulative Failures + ShortWrites
@@ -215,7 +215,7 @@ Recognised variables (default prefix `LOG_`):
 Example:
 
 ```go
-logger := pslog.LoggerFromEnv(
+logger := pslog.LoggerFromEnv(context.Background(),
 	pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured}),
 )
 logger.Info("ready")
@@ -224,7 +224,7 @@ logger.Info("ready")
 Programmatic palette selection uses a pointer:
 
 ```go
-logger := pslog.NewWithOptions(os.Stdout, pslog.Options{
+logger := pslog.NewWithOptions(context.Background(), os.Stdout, pslog.Options{
 	Mode:    pslog.ModeStructured,
 	Palette: &ansi.PaletteOneDark,
 })
@@ -234,7 +234,7 @@ logger.Info("ready")
 JSON non-finite float handling is configurable:
 
 ```go
-logger := pslog.NewWithOptions(os.Stdout, pslog.Options{
+logger := pslog.NewWithOptions(context.Background(), os.Stdout, pslog.Options{
 	Mode:                 pslog.ModeStructured,
 	NonFiniteFloatPolicy: pslog.NonFiniteFloatAsNull, // or NonFiniteFloatAsString
 })

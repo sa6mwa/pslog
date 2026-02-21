@@ -39,7 +39,7 @@ func TestJSONPlainEmitVariants(t *testing.T) {
 	for _, combo := range combos {
 		t.Run(combo.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			logger := NewWithOptions(&buf, combo.opts)
+			logger := NewWithOptions(nil, &buf, combo.opts)
 			if combo.withBase {
 				logger = logger.With("app", "demo")
 			}
@@ -66,7 +66,7 @@ func TestJSONPlainEmitVariants(t *testing.T) {
 
 func TestJSONPlainSlowPath(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewWithOptions(&buf, Options{Mode: ModeStructured, NoColor: true, DisableTimestamp: true})
+	logger := NewWithOptions(nil, &buf, Options{Mode: ModeStructured, NoColor: true, DisableTimestamp: true})
 	logger.Info("slow", 123, "value", "odd")
 	out := strings.TrimSpace(buf.String())
 	if !json.Valid([]byte(out)) {
@@ -108,7 +108,7 @@ func TestJSONColorEmitVariants(t *testing.T) {
 	for _, combo := range combos {
 		t.Run(combo.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			logger := NewWithOptions(&buf, combo.opts)
+			logger := NewWithOptions(nil, &buf, combo.opts)
 			if combo.withBase {
 				logger = logger.With("app", "demo")
 			}
@@ -133,7 +133,7 @@ func TestJSONColorEmitVariants(t *testing.T) {
 
 func TestJSONColorSlowPath(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewWithOptions(&buf, Options{Mode: ModeStructured, ForceColor: true, DisableTimestamp: true})
+	logger := NewWithOptions(nil, &buf, Options{Mode: ModeStructured, ForceColor: true, DisableTimestamp: true})
 	logger.Info("slow", 123, "value", "odd")
 	out := stripANSIString(buf.String())
 	if !strings.Contains(out, `"123"`) || !strings.Contains(out, `"arg1"`) {

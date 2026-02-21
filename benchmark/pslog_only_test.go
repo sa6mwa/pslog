@@ -13,7 +13,7 @@ func BenchmarkPSLogJSONOnly(b *testing.B) {
 		b.Fatal("no production entries loaded")
 	}
 	sink := newBenchmarkSink()
-	logger := pslog.NewWithOptions(sink, pslog.Options{Mode: pslog.ModeStructured, MinLevel: pslog.TraceLevel})
+	logger := pslog.NewWithOptions(nil, sink, pslog.Options{Mode: pslog.ModeStructured, MinLevel: pslog.TraceLevel})
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -41,7 +41,7 @@ func BenchmarkPSLogJSONObservedWriter(b *testing.B) {
 				out = pslog.NewObservedWriter(out, nil)
 			}
 
-			logger := pslog.NewWithOptions(out, pslog.Options{
+			logger := pslog.NewWithOptions(nil, out, pslog.Options{
 				Mode:     pslog.ModeStructured,
 				MinLevel: pslog.TraceLevel,
 			})

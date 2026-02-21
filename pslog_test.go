@@ -15,7 +15,7 @@ import (
 
 func TestConsoleOutputMatchesFormat(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true})
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true})
 	logger.Info("ready", "foo", "bar", "greeting", "hello world")
 
 	got := strings.TrimSpace(buf.String())
@@ -27,7 +27,7 @@ func TestConsoleOutputMatchesFormat(t *testing.T) {
 
 func TestStructuredOutputJSON(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true})
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true})
 	logger.Warn("boom", "count", 3)
 
 	line := strings.TrimSpace(buf.String())
@@ -55,7 +55,7 @@ func TestStructuredOutputJSON(t *testing.T) {
 
 func TestStructuredVerboseFields(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, VerboseFields: true})
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, VerboseFields: true})
 	logger.Info("hello")
 
 	line := strings.TrimSpace(buf.String())
@@ -79,7 +79,7 @@ func TestStructuredVerboseFields(t *testing.T) {
 
 func TestStructuredNoColorOnNonTerminal(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true})
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true})
 	logger.Info("msg")
 	if hasANSI(buf.String()) {
 		t.Fatalf("expected no colors on non-terminal writer, got %q", buf.String())
@@ -88,7 +88,7 @@ func TestStructuredNoColorOnNonTerminal(t *testing.T) {
 
 func TestStructuredForceColor(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, ForceColor: true})
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, ForceColor: true})
 	logger.Info("msg", "foo", "bar")
 	if !hasANSI(buf.String()) {
 		t.Fatalf("expected forced color output, got %q", buf.String())
@@ -115,7 +115,7 @@ func TestStructuredPaletteOptionOverridesColors(t *testing.T) {
 		MessageKey: "[MSGKEY]",
 		Message:    "[MSG]",
 	}
-	logger := pslog.NewWithOptions(&buf, pslog.Options{
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{
 		Mode:             pslog.ModeStructured,
 		DisableTimestamp: true,
 		ForceColor:       true,
@@ -155,7 +155,7 @@ func TestNewWithPaletteUsesProvidedPalette(t *testing.T) {
 			MessageKey: "[MSGKEY]",
 			Message:    "[MSG]",
 		}
-		logger := pslog.NewWithPalette(w, pslog.ModeConsole, &customPalette)
+		logger := pslog.NewWithPalette(nil, w, pslog.ModeConsole, &customPalette)
 		logger.Info("hello", "foo", "bar")
 	})
 
@@ -190,7 +190,7 @@ func TestDefaultPaletteIgnoresGlobalSetPalette(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{
 		Mode:             pslog.ModeStructured,
 		DisableTimestamp: true,
 		ForceColor:       true,
@@ -205,7 +205,7 @@ func TestDefaultPaletteIgnoresGlobalSetPalette(t *testing.T) {
 func TestConsoleColorAutoDetectWithTTY(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	out := captureTTYOutput(t, func(w io.Writer) {
-		logger := pslog.NewWithOptions(w, pslog.Options{Mode: pslog.ModeConsole})
+		logger := pslog.NewWithOptions(nil, w, pslog.Options{Mode: pslog.ModeConsole})
 		logger.Info("color")
 	})
 	if !hasANSI(out) {
@@ -215,7 +215,7 @@ func TestConsoleColorAutoDetectWithTTY(t *testing.T) {
 
 func TestConsoleNoColor(t *testing.T) {
 	out := captureTTYOutput(t, func(w io.Writer) {
-		logger := pslog.NewWithOptions(w, pslog.Options{Mode: pslog.ModeConsole, NoColor: true})
+		logger := pslog.NewWithOptions(nil, w, pslog.Options{Mode: pslog.ModeConsole, NoColor: true})
 		logger.Info("plain")
 	})
 	if hasANSI(out) {
@@ -225,7 +225,7 @@ func TestConsoleNoColor(t *testing.T) {
 
 func TestConsoleForceColorNoTTY(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{Mode: pslog.ModeConsole, ForceColor: true})
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{Mode: pslog.ModeConsole, ForceColor: true})
 	logger.Info("forced")
 	if !hasANSI(buf.String()) {
 		t.Fatalf("expected ANSI sequences with ForceColor, got %q", buf.String())
@@ -235,7 +235,7 @@ func TestConsoleForceColorNoTTY(t *testing.T) {
 func TestStructuredColorAutoDetectWithTTY(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	out := captureTTYOutput(t, func(w io.Writer) {
-		logger := pslog.NewWithOptions(w, pslog.Options{Mode: pslog.ModeStructured})
+		logger := pslog.NewWithOptions(nil, w, pslog.Options{Mode: pslog.ModeStructured})
 		logger.Info("msg", "foo", "bar")
 	})
 	if !hasANSI(out) {
@@ -245,7 +245,7 @@ func TestStructuredColorAutoDetectWithTTY(t *testing.T) {
 
 func TestStructuredNoColorOnTTY(t *testing.T) {
 	out := captureTTYOutput(t, func(w io.Writer) {
-		logger := pslog.NewWithOptions(w, pslog.Options{Mode: pslog.ModeStructured, NoColor: true})
+		logger := pslog.NewWithOptions(nil, w, pslog.Options{Mode: pslog.ModeStructured, NoColor: true})
 		logger.Info("msg", "foo", "bar")
 	})
 	if hasANSI(out) {
@@ -278,7 +278,7 @@ func hasANSI(s string) bool {
 
 func TestWithAndMinimalSubset(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true}).With("app", "demo")
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true}).With("app", "demo")
 	base := any(logger).(pslog.Base)
 	base.Info("up")
 	got := strings.TrimSpace(buf.String())
@@ -289,7 +289,7 @@ func TestWithAndMinimalSubset(t *testing.T) {
 
 func TestLogLoggerBridgePSL(t *testing.T) {
 	var buf bytes.Buffer
-	std := pslog.LogLogger(pslog.NewWithOptions(&buf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true}))
+	std := pslog.LogLogger(pslog.NewWithOptions(nil, &buf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true}))
 	std.Println("[INFO] bridge")
 	if !strings.Contains(buf.String(), "bridge") {
 		t.Fatalf("bridge output missing message: %q", buf.String())
@@ -298,7 +298,7 @@ func TestLogLoggerBridgePSL(t *testing.T) {
 
 func TestConsoleUTCOption(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{
 		Mode:       pslog.ModeConsole,
 		TimeFormat: time.RFC3339,
 		NoColor:    true,

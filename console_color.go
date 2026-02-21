@@ -1,6 +1,7 @@
 package pslog
 
 import (
+	"context"
 	"io"
 	"math"
 	"strconv"
@@ -21,7 +22,7 @@ type consoleColorLogger struct {
 	emit         consoleColorEmitFunc
 }
 
-func newConsoleColorLogger(cfg coreConfig, opts Options) *consoleColorLogger {
+func newConsoleColorLogger(ctx context.Context, cfg coreConfig, opts Options) *consoleColorLogger {
 	configureConsoleScannerFromOptions(opts)
 	palette := resolvePaletteOption(opts.Palette)
 	logger := &consoleColorLogger{
@@ -29,7 +30,9 @@ func newConsoleColorLogger(cfg coreConfig, opts Options) *consoleColorLogger {
 		base:     newLoggerBase(cfg, nil),
 		lineHint: new(atomic.Int64),
 	}
-	claimTimeCacheOwnership(cfg.timeCache, ownerToken(logger))
+	owner := ownerToken(logger)
+	claimTimeCacheOwnership(cfg.timeCache, owner)
+	claimContextCancellation(ctx, cfg.writer, cfg.timeCache, owner)
 	logger.rebuildBaseBytes()
 	return logger
 }

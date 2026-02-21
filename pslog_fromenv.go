@@ -1,6 +1,7 @@
 package pslog
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -43,14 +44,15 @@ func WithEnvWriter(w io.Writer) LoggerFromEnvOption {
 }
 
 // LoggerFromEnv builds a logger from environment variables, allowing optional
-// seeded options and writers. Environment values override supplied options.
+// seeded options and writers. Environment values override supplied options. ctx
+// controls runtime lifecycle; cancellation tears down logger-owned resources.
 //
 // Recognised variables are: {prefix}LEVEL, VERBOSE_FIELDS, CALLER_KEYVAL,
 // CALLER_KEY, MODE (console|structured|json), TIME_FORMAT, DISABLE_TIMESTAMP,
 // NO_COLOR, FORCE_COLOR, PALETTE, UTC, OUTPUT, and OUTPUT_FILE_MODE.
 // OUTPUT accepts stdout, stderr, default, a file path, or stdout+/stderr+/default+<path> to
 // tee. OUTPUT_FILE_MODE sets the mode for newly created output files.
-func LoggerFromEnv(opts ...LoggerFromEnvOption) Logger {
+func LoggerFromEnv(ctx context.Context, opts ...LoggerFromEnvOption) Logger {
 	cfg := loggerFromEnvConfig{prefix: "LOG_"}
 	for _, opt := range opts {
 		if opt != nil {
@@ -138,7 +140,7 @@ func LoggerFromEnv(opts ...LoggerFromEnvOption) Logger {
 			writer = resolved
 		}
 	}
-	logger := NewWithOptions(writer, resolvedOpts)
+	logger := NewWithOptions(ctx, writer, resolvedOpts)
 	if outputFileModeErr != nil {
 		logger.With(outputFileModeErr).Error("logger.output.file_mode.invalid", "output_file_mode", outputFileModeValue)
 	}

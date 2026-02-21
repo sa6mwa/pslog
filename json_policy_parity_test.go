@@ -108,7 +108,7 @@ func TestJSONFloatPolicyDefaultString(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			logger := NewWithOptions(&buf, tc.opts).With(
+			logger := NewWithOptions(nil, &buf, tc.opts).With(
 				"base_nan", math.NaN(),
 				"base_pos_inf", math.Inf(1),
 				"base_neg_inf", math.Inf(-1),
@@ -152,7 +152,7 @@ func TestJSONFloatPolicyNull(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			logger := NewWithOptions(&buf, tc.opts).With(
+			logger := NewWithOptions(nil, &buf, tc.opts).With(
 				"base_nan", math.NaN(),
 				"base_pos_inf", math.Inf(1),
 				"base_neg_inf", math.Inf(-1),
@@ -180,7 +180,7 @@ type scenario struct {
 func emitJSONForParity(t *testing.T, opts Options, sc scenario) map[string]any {
 	t.Helper()
 	var buf bytes.Buffer
-	logger := NewWithOptions(&buf, opts)
+	logger := NewWithOptions(nil, &buf, opts)
 	if sc.withBase {
 		logger = logger.With(
 			"service", "checkout",

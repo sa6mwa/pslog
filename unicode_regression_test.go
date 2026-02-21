@@ -68,7 +68,7 @@ func TestUnicodePrintableAllModes(t *testing.T) {
 		for _, mode := range modes {
 			t.Run(sample.name+"_"+mode.name, func(t *testing.T) {
 				var buf strings.Builder
-				logger := NewWithOptions(&buf, mode.opts)
+				logger := NewWithOptions(nil, &buf, mode.opts)
 				logger.Info("event", "value", sample.value)
 
 				out := strings.TrimSpace(buf.String())

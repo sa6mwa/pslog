@@ -8,4 +8,3 @@ func resolvePaletteOption(palette *ansi.Palette) *ansi.Palette {
 	}
 	return &ansi.PaletteDefault
 }
-

@@ -23,7 +23,7 @@ func TestLoggersAllocateZero(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		logger := NewWithOptions(io.Discard, tc.opts)
+		logger := NewWithOptions(nil, io.Discard, tc.opts)
 
 		// Warm caches (duration/time/string/float) so the measured run is steady-state.
 		logger.Info("warm", keyvals...)
@@ -89,7 +89,7 @@ func TestJSONNonFiniteFloatAllocateZero(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		logger := NewWithOptions(io.Discard, tc.opts)
+		logger := NewWithOptions(nil, io.Discard, tc.opts)
 
 		// Warm internal writer caches before measuring steady-state allocations.
 		logger.Info("warm", keyvals...)

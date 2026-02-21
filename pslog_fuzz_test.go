@@ -2,6 +2,7 @@ package pslog_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,7 +32,7 @@ func TestStructuredJSONEscaping(t *testing.T) {
 	for _, tc := range jsonEscapingSeeds {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			logger := pslog.NewWithOptions(&buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true})
+			logger := pslog.NewWithOptions(nil, &buf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true})
 			logger = logger.With("seed", tc.name)
 			logger.Info(tc.msg, tc.key, tc.value)
 
@@ -70,10 +71,10 @@ func FuzzLogVariants(f *testing.F) {
 			consoleColorBuf    bytes.Buffer
 		)
 
-		plainStructured := pslog.NewWithOptions(&structuredPlainBuf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true, MinLevel: pslog.DebugLevel}).With("origin", "fuzz")
-		colorStructured := pslog.NewWithOptions(&structuredColorBuf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, ForceColor: true, MinLevel: pslog.DebugLevel}).With("origin", "fuzz")
-		plainConsole := pslog.NewWithOptions(&consolePlainBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true, MinLevel: pslog.DebugLevel}).With("origin", "fuzz")
-		colorConsole := pslog.NewWithOptions(&consoleColorBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, ForceColor: true, MinLevel: pslog.DebugLevel}).With("origin", "fuzz")
+		plainStructured := pslog.NewWithOptions(nil, &structuredPlainBuf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true, MinLevel: pslog.DebugLevel}).With("origin", "fuzz")
+		colorStructured := pslog.NewWithOptions(nil, &structuredColorBuf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, ForceColor: true, MinLevel: pslog.DebugLevel}).With("origin", "fuzz")
+		plainConsole := pslog.NewWithOptions(nil, &consolePlainBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, NoColor: true, MinLevel: pslog.DebugLevel}).With("origin", "fuzz")
+		colorConsole := pslog.NewWithOptions(nil, &consoleColorBuf, pslog.Options{Mode: pslog.ModeConsole, DisableTimestamp: true, ForceColor: true, MinLevel: pslog.DebugLevel}).With("origin", "fuzz")
 
 		type pair struct {
 			key any
@@ -159,6 +160,58 @@ func FuzzLogVariants(f *testing.F) {
 		}
 		if plainConsoleLine != colorConsoleLine {
 			t.Fatalf("console color output mismatch:\nplain=%s\ncolor=%s", plainConsoleLine, colorConsoleLine)
+		}
+	})
+}
+
+func FuzzLoggerContextCancellation(f *testing.F) {
+	f.Add(uint8(0), "hello", "key", "value")
+	f.Add(uint8(3), "line\nfeed", "key\x7f", `{"a":1}`)
+	f.Add(uint8(255), "", "", "")
+
+	f.Fuzz(func(t *testing.T, mask uint8, msg, key, value string) {
+		variants := []pslog.Options{
+			{Mode: pslog.ModeStructured, NoColor: true, TimeFormat: time.RFC3339, MinLevel: pslog.DebugLevel},
+			{Mode: pslog.ModeStructured, ForceColor: true, TimeFormat: time.RFC3339, MinLevel: pslog.DebugLevel},
+			{Mode: pslog.ModeConsole, NoColor: true, TimeFormat: time.RFC3339, MinLevel: pslog.DebugLevel},
+			{Mode: pslog.ModeConsole, ForceColor: true, TimeFormat: time.RFC3339, MinLevel: pslog.DebugLevel},
+		}
+
+		for i, opts := range variants {
+			ctx, cancel := context.WithCancel(context.Background())
+			var buf bytes.Buffer
+			logger := pslog.NewWithOptions(ctx, &buf, opts).With("variant", i)
+			if mask&(1<<uint(i)) != 0 {
+				cancel()
+			}
+
+			logger.Info(msg, sanitizeKey(key), value)
+			if mask&(1<<uint(i+4)) != 0 {
+				cancel()
+			}
+			logger.Warn("post", "k", value)
+			if closer, ok := logger.(interface{ Close() error }); ok && mask&(1<<uint(i+8)) != 0 {
+				_ = closer.Close()
+			}
+			cancel()
+
+			if opts.Mode != pslog.ModeStructured {
+				continue
+			}
+			output := strings.TrimSpace(stripANSI(buf.String()))
+			if output == "" {
+				continue
+			}
+			for _, line := range strings.Split(output, "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				var payload map[string]any
+				if err := json.Unmarshal([]byte(line), &payload); err != nil {
+					t.Fatalf("invalid structured output for variant %d: %v (%q)", i, err, line)
+				}
+			}
 		}
 	})
 }

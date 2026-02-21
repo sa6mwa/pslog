@@ -1,6 +1,7 @@
 package pslog
 
 import (
+	"context"
 	"io"
 	"sync/atomic"
 )
@@ -41,7 +42,7 @@ func writeJSONStringField(lw *lineWriter, first *bool, keyData []byte, value str
 	writePTJSONString(lw, value)
 }
 
-func newJSONPlainLogger(cfg coreConfig, opts Options) *jsonPlainLogger {
+func newJSONPlainLogger(ctx context.Context, cfg coreConfig, opts Options) *jsonPlainLogger {
 	tsKey := "ts"
 	lvlKey := "lvl"
 	msgKey := "msg"
@@ -61,7 +62,9 @@ func newJSONPlainLogger(cfg coreConfig, opts Options) *jsonPlainLogger {
 		verboseField: opts.VerboseFields,
 		lineHint:     new(atomic.Int64),
 	}
-	claimTimeCacheOwnership(cfg.timeCache, ownerToken(logger))
+	owner := ownerToken(logger)
+	claimTimeCacheOwnership(cfg.timeCache, owner)
+	claimContextCancellation(ctx, cfg.writer, cfg.timeCache, owner)
 	logger.rebuildBasePayload()
 	return logger
 }

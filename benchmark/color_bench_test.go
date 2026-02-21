@@ -19,8 +19,8 @@ var benchKVs = []any{
 
 func BenchmarkStructuredColorHotPath(b *testing.B) {
 	sink := newBenchmarkSink()
-	plain := pslog.NewWithOptions(sink, pslog.Options{Mode: pslog.ModeStructured, TimeFormat: pslog.DTGTimeFormat, MinLevel: pslog.TraceLevel})
-	color := pslog.NewWithOptions(sink, pslog.Options{Mode: pslog.ModeStructured, TimeFormat: pslog.DTGTimeFormat, ForceColor: true, MinLevel: pslog.TraceLevel})
+	plain := pslog.NewWithOptions(nil, sink, pslog.Options{Mode: pslog.ModeStructured, TimeFormat: pslog.DTGTimeFormat, MinLevel: pslog.TraceLevel})
+	color := pslog.NewWithOptions(nil, sink, pslog.Options{Mode: pslog.ModeStructured, TimeFormat: pslog.DTGTimeFormat, ForceColor: true, MinLevel: pslog.TraceLevel})
 
 	b.Run("plain", func(b *testing.B) {
 		sink.resetCount()
@@ -45,8 +45,8 @@ func BenchmarkStructuredColorHotPath(b *testing.B) {
 
 func BenchmarkConsoleColorHotPath(b *testing.B) {
 	sink := newBenchmarkSink()
-	plain := pslog.NewWithOptions(sink, pslog.Options{Mode: pslog.ModeConsole, TimeFormat: pslog.DTGTimeFormat, NoColor: true, MinLevel: pslog.TraceLevel})
-	color := pslog.NewWithOptions(sink, pslog.Options{Mode: pslog.ModeConsole, TimeFormat: pslog.DTGTimeFormat, ForceColor: true, MinLevel: pslog.TraceLevel})
+	plain := pslog.NewWithOptions(nil, sink, pslog.Options{Mode: pslog.ModeConsole, TimeFormat: pslog.DTGTimeFormat, NoColor: true, MinLevel: pslog.TraceLevel})
+	color := pslog.NewWithOptions(nil, sink, pslog.Options{Mode: pslog.ModeConsole, TimeFormat: pslog.DTGTimeFormat, ForceColor: true, MinLevel: pslog.TraceLevel})
 
 	b.Run("plain", func(b *testing.B) {
 		sink.resetCount()

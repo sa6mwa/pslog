@@ -25,7 +25,7 @@ func (w *closeTrackingWriter) Close() error {
 
 func TestLoggerCloseDoesNotCloseUserProvidedWriter(t *testing.T) {
 	writer := &closeTrackingWriter{}
-	logger := NewWithOptions(writer, Options{
+	logger := NewWithOptions(nil, writer, Options{
 		Mode:             ModeStructured,
 		NoColor:          true,
 		DisableTimestamp: true,
@@ -55,7 +55,7 @@ func TestLoggerFromEnvCloseClosesOwnedOutput(t *testing.T) {
 	path := filepath.Join(dir, "owned.log")
 	t.Setenv("PSLOG_OBS_OUTPUT", path)
 
-	logger := LoggerFromEnv(
+	logger := LoggerFromEnv(nil,
 		WithEnvPrefix("PSLOG_OBS_"),
 		WithEnvOptions(Options{
 			Mode:             ModeStructured,

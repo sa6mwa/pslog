@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -10,8 +11,9 @@ import (
 )
 
 func main() {
-	l := pslog.NewWithPalette(os.Stdout, pslog.ModeStructured, &ansi.PaletteMonokaiVibrant).LogLevel(pslog.TraceLevel)
-	c := pslog.NewWithPalette(os.Stdout, pslog.ModeConsole, &ansi.PaletteMonokaiVibrant).LogLevel(pslog.TraceLevel).With("logger", "pkt.systems/pslog", "mode", "console")
+	ctx := context.Background()
+	l := pslog.NewWithPalette(ctx, os.Stdout, pslog.ModeStructured, &ansi.PaletteMonokaiVibrant).LogLevel(pslog.TraceLevel)
+	c := pslog.NewWithPalette(ctx, os.Stdout, pslog.ModeConsole, &ansi.PaletteMonokaiVibrant).LogLevel(pslog.TraceLevel).With("logger", "pkt.systems/pslog", "mode", "console")
 
 	c.Info("Hello 🤓")
 
@@ -41,8 +43,8 @@ func main() {
 
 	time.Sleep(3500 * time.Millisecond)
 
-	l = pslog.NewWithPalette(os.Stdout, pslog.ModeStructured, &ansi.PaletteSynthwave84).LogLevel(pslog.TraceLevel)
-	c = pslog.NewWithPalette(os.Stdout, pslog.ModeConsole, &ansi.PaletteSynthwave84).LogLevel(pslog.TraceLevel).With("logger", "pkt.systems/pslog")
+	l = pslog.NewWithPalette(ctx, os.Stdout, pslog.ModeStructured, &ansi.PaletteSynthwave84).LogLevel(pslog.TraceLevel)
+	c = pslog.NewWithPalette(ctx, os.Stdout, pslog.ModeConsole, &ansi.PaletteSynthwave84).LogLevel(pslog.TraceLevel).With("logger", "pkt.systems/pslog")
 
 	l.Trace("AI also gave us cool colors")
 

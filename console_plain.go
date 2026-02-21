@@ -1,6 +1,7 @@
 package pslog
 
 import (
+	"context"
 	"io"
 	"sync/atomic"
 	"time"
@@ -16,13 +17,15 @@ type consolePlainLogger struct {
 	emit         consolePlainEmitFunc
 }
 
-func newConsolePlainLogger(cfg coreConfig, opts Options) *consolePlainLogger {
+func newConsolePlainLogger(ctx context.Context, cfg coreConfig, opts Options) *consolePlainLogger {
 	configureConsoleScannerFromOptions(opts)
 	logger := &consolePlainLogger{
 		base:     newLoggerBase(cfg, nil),
 		lineHint: new(atomic.Int64),
 	}
-	claimTimeCacheOwnership(cfg.timeCache, ownerToken(logger))
+	owner := ownerToken(logger)
+	claimTimeCacheOwnership(cfg.timeCache, owner)
+	claimContextCancellation(ctx, cfg.writer, cfg.timeCache, owner)
 	logger.rebuildBaseBytes()
 	return logger
 }

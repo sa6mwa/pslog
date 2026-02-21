@@ -41,7 +41,7 @@ func captureLogOutput(t *testing.T, mode Mode, now time.Time, palette ansi.Palet
 	t.Helper()
 
 	buf := &bytes.Buffer{}
-	logger := NewWithOptions(buf, Options{
+	logger := NewWithOptions(nil, buf, Options{
 		Mode:       mode,
 		ForceColor: true,
 		TimeFormat: time.RFC3339Nano,

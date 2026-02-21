@@ -14,7 +14,7 @@ func TestPaletteSwapConcurrentWithColorLogging(t *testing.T) {
 
 	modes := []Mode{ModeConsole, ModeStructured}
 	for _, mode := range modes {
-		logger := NewWithOptions(io.Discard, Options{
+		logger := NewWithOptions(nil, io.Discard, Options{
 			Mode:       mode,
 			ForceColor: true,
 			MinLevel:   TraceLevel,

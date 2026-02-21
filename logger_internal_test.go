@@ -21,7 +21,7 @@ func TestLoggerFatalAndPanicInternal(t *testing.T) {
 	for _, variant := range variants {
 		t.Run(variant.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			logger := NewWithOptions(&buf, variant.opts)
+			logger := NewWithOptions(nil, &buf, variant.opts)
 
 			called := false
 			origExit := exitProcess

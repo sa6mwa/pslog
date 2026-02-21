@@ -15,15 +15,19 @@ func newLegacyLikeTimeCache(layout string, utc bool, formatter func(time.Time) s
 		newTicker: defaultTicker,
 		formatter: formatter,
 		stopCh:    make(chan struct{}),
+		doneCh:    make(chan struct{}),
 	}
 	cache.value.Store(cache.formatTime(cache.nowTime()))
 	ticker := cache.makeTicker(time.Second)
 	if ticker.C != nil {
 		go func() {
+			defer close(cache.doneCh)
 			for now := range ticker.C {
 				cache.value.Store(cache.formatTime(now))
 			}
 		}()
+	} else {
+		close(cache.doneCh)
 	}
 	return cache
 }
@@ -116,7 +120,7 @@ func BenchmarkLoggerTimeCacheStrategyAB(b *testing.B) {
 					s := s
 					b.Run(fmt.Sprintf("round%d/%s", round, s.name), func(b *testing.B) {
 						cache := s.make()
-						logger := injectBenchmarkTimeCache(NewWithOptions(io.Discard, v.opts), cache)
+						logger := injectBenchmarkTimeCache(NewWithOptions(nil, io.Discard, v.opts), cache)
 						// Ensure each sub-benchmark tears down runtime resources and does not leak ticker goroutines.
 						if closer, ok := logger.(interface{ Close() error }); ok {
 							b.Cleanup(func() { _ = closer.Close() })

@@ -1,6 +1,7 @@
 package pslog
 
 import (
+	"context"
 	"io"
 	"sync/atomic"
 	"time"
@@ -34,7 +35,7 @@ func writeColoredJSONStringField(lw *lineWriter, first *bool, keyData []byte, va
 	writePTJSONStringColored(lw, color, value)
 }
 
-func newJSONColorLogger(cfg coreConfig, opts Options) *jsonColorLogger {
+func newJSONColorLogger(ctx context.Context, cfg coreConfig, opts Options) *jsonColorLogger {
 	tsKey := "ts"
 	lvlKey := "lvl"
 	msgKey := "msg"
@@ -56,7 +57,9 @@ func newJSONColorLogger(cfg coreConfig, opts Options) *jsonColorLogger {
 		lineHint:     new(atomic.Int64),
 		verboseField: opts.VerboseFields,
 	}
-	claimTimeCacheOwnership(cfg.timeCache, ownerToken(logger))
+	owner := ownerToken(logger)
+	claimTimeCacheOwnership(cfg.timeCache, owner)
+	claimContextCancellation(ctx, cfg.writer, cfg.timeCache, owner)
 	logger.rebuildBasePayload()
 	return logger
 }

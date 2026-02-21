@@ -50,6 +50,7 @@ type timeCache struct {
 	formatter func(time.Time) string
 
 	stopCh   chan struct{}
+	doneCh   chan struct{}
 	stopOnce sync.Once
 	stopped  atomic.Bool
 }
@@ -73,6 +74,7 @@ func newTimeCache(layout string, utc bool, formatter func(time.Time) string) *ti
 		newTicker: defaultTicker,
 		formatter: formatter,
 		stopCh:    make(chan struct{}),
+		doneCh:    make(chan struct{}),
 	}
 	cache.start()
 	return cache
@@ -86,6 +88,7 @@ func newStandaloneTimeCache(layout string, utc bool, formatter func(time.Time) s
 		newTicker: newTicker,
 		formatter: formatter,
 		stopCh:    make(chan struct{}),
+		doneCh:    make(chan struct{}),
 	}
 	cache.start()
 	return cache
@@ -106,6 +109,7 @@ func (c *timeCache) start() {
 	c.value.Store(c.formatTime(c.nowTime()))
 	ticker := c.makeTicker(time.Second)
 	if ticker.C == nil {
+		close(c.doneCh)
 		return
 	}
 	go c.refresh(ticker)
@@ -120,6 +124,7 @@ func (c *timeCache) Current() string {
 
 func (c *timeCache) refresh(ticker tickerControl) {
 	defer ticker.stop()
+	defer close(c.doneCh)
 	for {
 		select {
 		case <-c.stopCh:
@@ -179,6 +184,22 @@ func (c *timeCache) isStopped() bool {
 		return true
 	}
 	return c.stopped.Load()
+}
+
+func (c *timeCache) waitStopped(timeout time.Duration) bool {
+	if c == nil || c.doneCh == nil {
+		return true
+	}
+	if timeout <= 0 {
+		<-c.doneCh
+		return true
+	}
+	select {
+	case <-c.doneCh:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 func isCacheableLayout(layout string) bool {

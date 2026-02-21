@@ -20,7 +20,7 @@ func TestLoggerFromEnvOverridesOptions(t *testing.T) {
 	t.Setenv("PSLOG_TEST_MODE", "json")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{
@@ -54,7 +54,7 @@ func TestLoggerFromEnvVerboseFields(t *testing.T) {
 	t.Setenv("PSLOG_TEST_VERBOSE_FIELDS", "true")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, NoColor: true}),
@@ -94,7 +94,7 @@ func TestLoggerFromEnvDisableTimestamp(t *testing.T) {
 	t.Setenv("PSLOG_TEST_DISABLE_TIMESTAMP", "true")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, NoColor: true}),
@@ -122,7 +122,7 @@ func TestLoggerFromEnvNoColorDisablesColor(t *testing.T) {
 	t.Setenv("PSLOG_TEST_NO_COLOR", "true")
 
 	out := captureTTYOutput(t, func(w io.Writer) {
-		logger := pslog.LoggerFromEnv(
+		logger := pslog.LoggerFromEnv(nil,
 			pslog.WithEnvPrefix("PSLOG_TEST_"),
 			pslog.WithEnvWriter(w),
 			pslog.WithEnvOptions(pslog.Options{
@@ -144,7 +144,7 @@ func TestLoggerFromEnvCallerKey(t *testing.T) {
 	t.Setenv("PSLOG_TEST_CALLER_KEY", "caller")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
@@ -170,7 +170,7 @@ func TestLoggerFromEnvInvalidLevelKeepsSeed(t *testing.T) {
 	t.Setenv("PSLOG_TEST_LEVEL", "notalevel")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true, MinLevel: pslog.ErrorLevel}),
@@ -192,7 +192,7 @@ func TestLoggerFromEnvInvalidModeKeepsSeed(t *testing.T) {
 	t.Setenv("PSLOG_TEST_MODE", "nope")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
@@ -214,7 +214,7 @@ func TestLoggerFromEnvPalette(t *testing.T) {
 	t.Setenv("PSLOG_TEST_PALETTE", "one-dark")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{
@@ -235,7 +235,7 @@ func TestLoggerFromEnvPaletteAliasCompatibility(t *testing.T) {
 	t.Setenv("PSLOG_TEST_PALETTE", "doom-nord")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{
@@ -274,7 +274,7 @@ func TestLoggerFromEnvInvalidPaletteFallsBackToDefault(t *testing.T) {
 		MessageKey: "[MSGKEY]",
 		Message:    "[MSG]",
 	}
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{
@@ -299,7 +299,7 @@ func TestLoggerFromEnvTimeFormat(t *testing.T) {
 	t.Setenv("PSLOG_TEST_TIME_FORMAT", "2006-01-02")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, NoColor: true}),
@@ -330,7 +330,7 @@ func TestLoggerFromEnvOutputFile(t *testing.T) {
 	t.Setenv("PSLOG_TEST_OUTPUT", path)
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
@@ -361,7 +361,7 @@ func TestLoggerFromEnvOutputFileModeDefault(t *testing.T) {
 	t.Setenv("PSLOG_TEST_OUTPUT", path)
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
@@ -391,7 +391,7 @@ func TestLoggerFromEnvOutputFileModeOverride(t *testing.T) {
 	t.Setenv("PSLOG_TEST_OUTPUT_FILE_MODE", "0644")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
@@ -417,7 +417,7 @@ func TestLoggerFromEnvOutputDefaultKeepsSeed(t *testing.T) {
 	t.Setenv("PSLOG_TEST_OUTPUT", "default")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
@@ -437,7 +437,7 @@ func TestLoggerFromEnvOutputPathWithPlus(t *testing.T) {
 	t.Setenv("PSLOG_TEST_OUTPUT", path)
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
@@ -464,7 +464,7 @@ func TestLoggerFromEnvOutputDefaultTee(t *testing.T) {
 	t.Setenv("PSLOG_TEST_OUTPUT", "default+"+path)
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
@@ -490,7 +490,7 @@ func TestLoggerFromEnvOutputFailure(t *testing.T) {
 	t.Setenv("PSLOG_TEST_OUTPUT", dir)
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),
@@ -529,7 +529,7 @@ func TestLoggerFromEnvOutputFileModeInvalid(t *testing.T) {
 	t.Setenv("PSLOG_TEST_OUTPUT_FILE_MODE", "0x1ff")
 
 	var buf bytes.Buffer
-	logger := pslog.LoggerFromEnv(
+	logger := pslog.LoggerFromEnv(nil,
 		pslog.WithEnvPrefix("PSLOG_TEST_"),
 		pslog.WithEnvWriter(&buf),
 		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true}),

@@ -1,6 +1,7 @@
 package pslog
 
 import (
+	"context"
 	"io"
 	"os"
 	"sync"
@@ -8,6 +9,7 @@ import (
 )
 
 var cacheOwners sync.Map
+var contextCancelOwners sync.Map
 
 func ownerToken[T any](logger *T) uintptr {
 	if logger == nil {
@@ -23,7 +25,25 @@ func claimTimeCacheOwnership(cache *timeCache, owner uintptr) {
 	cacheOwners.LoadOrStore(cache, owner)
 }
 
+func claimContextCancellation(ctx context.Context, writer io.Writer, cache *timeCache, owner uintptr) {
+	if owner == 0 || ctx == nil || ctx.Done() == nil {
+		return
+	}
+	if cache == nil && !writerNeedsOwnedClose(writer) {
+		return
+	}
+	stop := context.AfterFunc(ctx, func() {
+		_ = closeLoggerRuntime(writer, cache, owner)
+	})
+	contextCancelOwners.Store(owner, stop)
+}
+
 func closeLoggerRuntime(writer io.Writer, cache *timeCache, owner uintptr) error {
+	if stop, ok := contextCancelOwners.LoadAndDelete(owner); ok {
+		if stopFn, ok := stop.(func() bool); ok && stopFn != nil {
+			stopFn()
+		}
+	}
 	if cache != nil {
 		if claimed, ok := cacheOwners.Load(cache); ok && claimed == owner {
 			cache.Close()
@@ -41,4 +61,12 @@ func closeOutput(w io.Writer) error {
 		return c.pslogOwnedClose()
 	}
 	return nil
+}
+
+func writerNeedsOwnedClose(w io.Writer) bool {
+	if w == nil || w == os.Stdout || w == os.Stderr {
+		return false
+	}
+	_, ok := w.(pslogOwnedCloser)
+	return ok
 }

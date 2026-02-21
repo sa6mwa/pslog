@@ -204,41 +204,50 @@ type Options struct {
 	CallerKey string
 }
 
-// New constructs a pslog adapter configured for console output.
-func New(w io.Writer) Logger {
-	return NewWithOptions(w, Options{Mode: ModeConsole})
+// New constructs a pslog adapter configured for console output. ctx controls
+// runtime lifecycle; cancellation tears down logger-owned resources.
+func New(ctx context.Context, w io.Writer) Logger {
+	return NewWithOptions(ctx, w, Options{Mode: ModeConsole})
 }
 
-// NewStructured returns a pslog adapter in structured JSON mode.
-func NewStructured(w io.Writer) Logger {
-	return NewWithOptions(w, Options{Mode: ModeStructured})
+// NewStructured returns a pslog adapter in structured JSON mode. ctx controls
+// runtime lifecycle; cancellation tears down logger-owned resources.
+func NewStructured(ctx context.Context, w io.Writer) Logger {
+	return NewWithOptions(ctx, w, Options{Mode: ModeStructured})
 }
 
 // NewStructuredNoColor returns a pslog adapter that always emits plain JSON.
-func NewStructuredNoColor(w io.Writer) Logger {
-	return NewWithOptions(w, Options{Mode: ModeStructured, NoColor: true})
+// ctx controls runtime lifecycle; cancellation tears down logger-owned
+// resources.
+func NewStructuredNoColor(ctx context.Context, w io.Writer) Logger {
+	return NewWithOptions(ctx, w, Options{Mode: ModeStructured, NoColor: true})
 }
 
-// NewWithOptions builds a pslog adapter with explicit settings.
-func NewWithOptions(w io.Writer, opts Options) Logger {
-	return buildAdapter(w, opts)
+// NewWithOptions builds a pslog adapter with explicit settings. ctx controls
+// runtime lifecycle; cancellation tears down logger-owned resources.
+func NewWithOptions(ctx context.Context, w io.Writer, opts Options) Logger {
+	return buildAdapter(ctx, w, opts)
 }
 
 // NewWithPalette builds a logger in mode using palette for colorized output.
-func NewWithPalette(w io.Writer, mode Mode, palette *ansi.Palette) Logger {
-	return NewWithOptions(w, Options{Mode: mode, Palette: palette})
+// ctx controls runtime lifecycle; cancellation tears down logger-owned
+// resources.
+func NewWithPalette(ctx context.Context, w io.Writer, mode Mode, palette *ansi.Palette) Logger {
+	return NewWithOptions(ctx, w, Options{Mode: mode, Palette: palette})
 }
 
 // NewBaseLogger returns a Base implementation writing to w with default
-// options.
-func NewBaseLogger(w io.Writer) Base {
-	return buildAdapter(w, Options{Mode: ModeStructured})
+// options. ctx controls runtime lifecycle; cancellation tears down
+// logger-owned resources.
+func NewBaseLogger(ctx context.Context, w io.Writer) Base {
+	return buildAdapter(ctx, w, Options{Mode: ModeStructured})
 }
 
 // NewBaseLoggerWithOptions returns a Base implementation using the supplied
-// options.
-func NewBaseLoggerWithOptions(w io.Writer, opts Options) Base {
-	return buildAdapter(w, opts)
+// options. ctx controls runtime lifecycle; cancellation tears down
+// logger-owned resources.
+func NewBaseLoggerWithOptions(ctx context.Context, w io.Writer, opts Options) Base {
+	return buildAdapter(ctx, w, opts)
 }
 
 type loggerContextKey struct{}
@@ -318,7 +327,10 @@ func LogLoggerWithLevel(logger Logger, level Level) *log.Logger {
 	return log.New(levelPinnedWriter{logger: logger, level: level}, "", 0)
 }
 
-func buildAdapter(w io.Writer, opts Options) Logger {
+func buildAdapter(ctx context.Context, w io.Writer, opts Options) Logger {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if w == nil {
 		w = io.Discard
 	}
@@ -384,14 +396,14 @@ func buildAdapter(w io.Writer, opts Options) Logger {
 
 	if mode == ModeStructured {
 		if colorEnabled {
-			return newJSONColorLogger(cfg, opts)
+			return newJSONColorLogger(ctx, cfg, opts)
 		}
-		return newJSONPlainLogger(cfg, opts)
+		return newJSONPlainLogger(ctx, cfg, opts)
 	}
 	if colorEnabled {
-		return newConsoleColorLogger(cfg, opts)
+		return newConsoleColorLogger(ctx, cfg, opts)
 	}
-	return newConsolePlainLogger(cfg, opts)
+	return newConsolePlainLogger(ctx, cfg, opts)
 }
 
 func classifyLineLevel(line string) (Level, string) {

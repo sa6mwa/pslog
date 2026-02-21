@@ -14,7 +14,7 @@ import (
 
 func TestStructuredJSONParityAllTypes(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{
 		Mode:             pslog.ModeStructured,
 		DisableTimestamp: true,
 		NoColor:          true,
@@ -83,7 +83,7 @@ func TestStructuredJSONParityAllTypes(t *testing.T) {
 
 func TestStructuredJSONColorErrorQuoting(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{
 		Mode:             pslog.ModeStructured,
 		ForceColor:       true,
 		DisableTimestamp: true,
@@ -114,8 +114,8 @@ func TestStructuredJSONColorMatchesPlain(t *testing.T) {
 		pslog.TrustedString("trusted_key"), pslog.TrustedString("trusted value"),
 	}
 
-	plain := pslog.NewWithOptions(&plainBuf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true})
-	color := pslog.NewWithOptions(&colorBuf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, ForceColor: true})
+	plain := pslog.NewWithOptions(nil, &plainBuf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, NoColor: true})
+	color := pslog.NewWithOptions(nil, &colorBuf, pslog.Options{Mode: pslog.ModeStructured, DisableTimestamp: true, ForceColor: true})
 
 	plain.Info("hello", fields...)
 	color.Info("hello", fields...)

@@ -50,7 +50,7 @@ func BenchmarkPSLogProductionObservedAB(b *testing.B) {
 			}
 
 			opts.MinLevel = pslog.TraceLevel
-			logger := pslog.NewWithOptions(out, opts)
+			logger := pslog.NewWithOptions(nil, out, opts)
 			activeEntries := entries
 
 			if useWith {

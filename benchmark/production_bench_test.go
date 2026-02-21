@@ -54,7 +54,7 @@ func BenchmarkPSLogProduction(b *testing.B) {
 		b.Run(name, func(b *testing.B) {
 			sink.resetCount()
 			opts.MinLevel = pslog.TraceLevel
-			logger := pslog.NewWithOptions(sink, opts)
+			logger := pslog.NewWithOptions(nil, sink, opts)
 			activeEntries := entries
 			if useWith {
 				if len(withArgs) > 0 {

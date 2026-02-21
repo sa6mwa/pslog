@@ -31,12 +31,12 @@
 //
 // # Usage
 //
-//	logger := pslog.NewStructured(os.Stdout).With("service", "checkout", "env", "prod")
+//	logger := pslog.NewStructured(context.Background(), os.Stdout).With("service", "checkout", "env", "prod")
 //	logger.Info("ready", "port", 8080)
 //
 // The console adapter mirrors the API:
 //
-//	logger := pslog.New(os.Stdout)
+//	logger := pslog.New(context.Background(), os.Stdout)
 //	logger.Warn("cache bust", "key", pslog.NewTrustedString("user:42"))
 //
 // Environment configuration is available via LoggerFromEnv. The helper reads
@@ -45,7 +45,7 @@
 // synthwave-84, and LOG_OUTPUT accepts stdout, stderr, default, a file path,
 // or stdout+/stderr+/default+<path> to tee:
 //
-//	logger := pslog.LoggerFromEnv(
+//	logger := pslog.LoggerFromEnv(context.Background(),
 //		pslog.WithEnvOptions(pslog.Options{Mode: pslog.ModeStructured}),
 //	)
 //	logger.Info("ready")
@@ -65,7 +65,7 @@
 //	obs := pslog.NewObservedWriter(os.Stdout, func(f pslog.WriteFailure) {
 //		// export f.Err / f.Written / f.Attempted to metrics
 //	})
-//	logger := pslog.NewWithOptions(obs, pslog.Options{Mode: pslog.ModeStructured})
+//	logger := pslog.NewWithOptions(context.Background(), obs, pslog.Options{Mode: pslog.ModeStructured})
 //	logger.Info("ready")
 //	_ = obs.Stats()
 //

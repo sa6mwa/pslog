@@ -64,7 +64,7 @@ func TestLoggerVariantsCoverage(t *testing.T) {
 	for _, variant := range variants {
 		t.Run(variant.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			logger := pslog.NewWithOptions(&buf, variant.opts)
+			logger := pslog.NewWithOptions(nil, &buf, variant.opts)
 
 			if fmt.Sprintf("%p", logger.LogLevelFromEnv("_UNSET")) != fmt.Sprintf("%p", logger) {
 				t.Fatalf("expected LogLevelFromEnv without env to return same logger")

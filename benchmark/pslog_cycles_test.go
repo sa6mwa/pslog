@@ -43,7 +43,7 @@ func TestPSLogJSONCycles(t *testing.T) {
 	runtime.GOMAXPROCS(1)
 
 	sink := &cycleSink{}
-	logger := pslog.NewWithOptions(sink, pslog.Options{Mode: pslog.ModeStructured, MinLevel: pslog.TraceLevel})
+	logger := pslog.NewWithOptions(nil, sink, pslog.Options{Mode: pslog.ModeStructured, MinLevel: pslog.TraceLevel})
 
 	level := pslog.InfoLevel
 	message := "lease.acquire"

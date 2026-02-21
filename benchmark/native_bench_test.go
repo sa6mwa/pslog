@@ -160,7 +160,7 @@ func BenchmarkLoggerFormattedVsUnixEpoch(b *testing.B) {
 
 func newPSLogLogger(w io.Writer, opts pslog.Options) pslog.Logger {
 	opts.MinLevel = pslog.TraceLevel
-	return pslog.NewWithOptions(w, opts)
+	return pslog.NewWithOptions(nil, w, opts)
 }
 
 func runPSLogKVAny(b *testing.B, logger pslog.Logger) {
@@ -265,7 +265,7 @@ func nativeLoggers() []nativeLogger {
 					TimeFormat: time.RFC3339,
 					MinLevel:   pslog.TraceLevel,
 				}
-				logger := pslog.NewWithOptions(sink, opts)
+				logger := pslog.NewWithOptions(nil, sink, opts)
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
@@ -284,7 +284,7 @@ func nativeLoggers() []nativeLogger {
 					TimeFormat: time.RFC3339,
 					MinLevel:   pslog.TraceLevel,
 				}
-				logger := pslog.NewWithOptions(sink, opts)
+				logger := pslog.NewWithOptions(nil, sink, opts)
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
@@ -302,7 +302,7 @@ func nativeLoggers() []nativeLogger {
 					TimeFormat: time.RFC3339,
 					MinLevel:   pslog.TraceLevel,
 				}
-				logger := pslog.NewWithOptions(sink, opts)
+				logger := pslog.NewWithOptions(nil, sink, opts)
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
@@ -321,7 +321,7 @@ func nativeLoggers() []nativeLogger {
 					ForceColor: true,
 					MinLevel:   pslog.TraceLevel,
 				}
-				logger := pslog.NewWithOptions(sink, opts)
+				logger := pslog.NewWithOptions(nil, sink, opts)
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {

@@ -220,7 +220,7 @@ func buildRunners(entries []productionEntry, pslogJSONName, pslogJSONColorName s
 					MinLevel:   pslog.TraceLevel,
 					TimeFormat: time.RFC3339,
 				}
-				logger := pslog.NewWithOptions(writer, opts)
+				logger := pslog.NewWithOptions(nil, writer, opts)
 				activeEntries := dynamicEntries
 				if len(withArgs) > 0 {
 					logger = logger.With(withArgs...)
@@ -240,7 +240,7 @@ func buildRunners(entries []productionEntry, pslogJSONName, pslogJSONColorName s
 					MinLevel:   pslog.TraceLevel,
 					TimeFormat: time.RFC3339,
 				}
-				logger := pslog.NewWithOptions(writer, opts)
+				logger := pslog.NewWithOptions(nil, writer, opts)
 				activeEntries := dynamicEntries
 				if len(withArgs) > 0 {
 					logger = logger.With(withArgs...)

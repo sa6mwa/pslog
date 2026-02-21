@@ -67,7 +67,7 @@ func TestConsolePlainEmitVariants(t *testing.T) {
 	for _, combo := range combos {
 		t.Run(combo.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			logger := NewWithOptions(&buf, combo.opts)
+			logger := NewWithOptions(nil, &buf, combo.opts)
 			if combo.withBase {
 				logger = logger.With("app", "demo")
 			}
@@ -90,7 +90,7 @@ func TestConsolePlainEmitVariants(t *testing.T) {
 
 func TestConsolePlainRuntimeSlowPath(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewWithOptions(&buf, Options{Mode: ModeConsole, NoColor: true, DisableTimestamp: true})
+	logger := NewWithOptions(nil, &buf, Options{Mode: ModeConsole, NoColor: true, DisableTimestamp: true})
 	logger.Info("slow", 123, "value", "msg", "ok")
 	out := buf.String()
 	if !strings.Contains(out, "123=") {

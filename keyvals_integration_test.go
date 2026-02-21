@@ -21,7 +21,7 @@ func extractLines(buf *bytes.Buffer) []string {
 
 func TestKeyvalsStructuredLogger(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewWithOptions(&buf, Options{Mode: ModeStructured, DisableTimestamp: true, NoColor: true, MinLevel: DebugLevel}).With("app", "demo")
+	logger := NewWithOptions(nil, &buf, Options{Mode: ModeStructured, DisableTimestamp: true, NoColor: true, MinLevel: DebugLevel}).With("app", "demo")
 
 	kv := Keyvals("user", "alice", "note", "multi\nline")
 	logger.Info("hello", kv...)
@@ -55,7 +55,7 @@ func TestKeyvalsStructuredLogger(t *testing.T) {
 
 func TestKeyvalsConsoleLogger(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewWithOptions(&buf, Options{Mode: ModeConsole, DisableTimestamp: true, NoColor: true, MinLevel: DebugLevel}).With("app", "demo")
+	logger := NewWithOptions(nil, &buf, Options{Mode: ModeConsole, DisableTimestamp: true, NoColor: true, MinLevel: DebugLevel}).With("app", "demo")
 
 	kv := Keyvals("user", "alice", "note", "multi\nline")
 	logger.Info("hello", kv...)

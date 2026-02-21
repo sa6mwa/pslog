@@ -29,7 +29,7 @@ func decodeJSONLine(t *testing.T, line string) map[string]any {
 
 func TestCallerKeyvalAddsFunctionPerLogEntry(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{
 		Mode:             pslog.ModeStructured,
 		NoColor:          true,
 		DisableTimestamp: true,
@@ -57,7 +57,7 @@ func TestCallerKeyvalAddsFunctionPerLogEntry(t *testing.T) {
 
 func TestCallerKeyvalUsesCustomKey(t *testing.T) {
 	var buf bytes.Buffer
-	logger := pslog.NewWithOptions(&buf, pslog.Options{
+	logger := pslog.NewWithOptions(nil, &buf, pslog.Options{
 		Mode:             pslog.ModeStructured,
 		NoColor:          true,
 		DisableTimestamp: true,
