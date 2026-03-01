@@ -6,6 +6,8 @@ const (
 	jsonControlThreshold uint64 = 0x2020202020202020
 	jsonQuoteMask        uint64 = 0x2222222222222222
 	jsonBackslashMask    uint64 = 0x5c5c5c5c5c5c5c5c
+	jsonSingleQuoteMask  uint64 = 0x2727272727272727
+	jsonLessThanMask     uint64 = 0x3c3c3c3c3c3c3c3c
 	consoleSpaceMask     uint64 = 0x2020202020202020
 	consoleDelMask       uint64 = 0x7f7f7f7f7f7f7f7f
 )
@@ -19,6 +21,13 @@ func chunkJSONUnsafeMask(chunk uint64) uint64 {
 	mask := (chunk - jsonControlThreshold) & ^chunk & asciiHighBitsMask
 	mask |= chunkEqualMask(chunk, jsonQuoteMask)
 	mask |= chunkEqualMask(chunk, jsonBackslashMask)
+	return mask
+}
+
+func chunkJSONStringEscapeMask(chunk uint64) uint64 {
+	mask := chunkJSONUnsafeMask(chunk)
+	mask |= chunkEqualMask(chunk, jsonSingleQuoteMask)
+	mask |= chunkEqualMask(chunk, jsonLessThanMask)
 	return mask
 }
 

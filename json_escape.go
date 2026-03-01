@@ -20,11 +20,11 @@ func appendEscapedStringContent(lw *lineWriter, s string) {
 		var base int
 		if remaining >= 16 {
 			chunk := *(*uint64)(unsafe.Add(unsafe.Pointer(ptr), uintptr(scan)))
-			mask = chunkJSONUnsafeMask(chunk)
+			mask = chunkJSONStringEscapeMask(chunk)
 			base = scan
 			if mask == 0 {
 				chunk = *(*uint64)(unsafe.Add(unsafe.Pointer(ptr), uintptr(scan+8)))
-				mask = chunkJSONUnsafeMask(chunk)
+				mask = chunkJSONStringEscapeMask(chunk)
 				if mask == 0 {
 					scan += 16
 					continue
@@ -34,7 +34,7 @@ func appendEscapedStringContent(lw *lineWriter, s string) {
 		} else if remaining >= 8 {
 			base = scan
 			chunk := *(*uint64)(unsafe.Add(unsafe.Pointer(ptr), uintptr(base)))
-			mask = chunkJSONUnsafeMask(chunk)
+			mask = chunkJSONStringEscapeMask(chunk)
 			if mask == 0 {
 				scan += 8
 				continue
