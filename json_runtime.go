@@ -15,8 +15,6 @@ var jsonNeedsEscape = func() [256]bool {
 	}
 	table['"'] = true
 	table['\\'] = true
-	table['<'] = true
-	table['\''] = true
 	return table
 }()
 

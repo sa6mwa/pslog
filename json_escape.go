@@ -20,11 +20,11 @@ func appendEscapedStringContent(lw *lineWriter, s string) {
 		var base int
 		if remaining >= 16 {
 			chunk := *(*uint64)(unsafe.Add(unsafe.Pointer(ptr), uintptr(scan)))
-			mask = chunkJSONStringEscapeMask(chunk)
+			mask = chunkJSONUnsafeMask(chunk)
 			base = scan
 			if mask == 0 {
 				chunk = *(*uint64)(unsafe.Add(unsafe.Pointer(ptr), uintptr(scan+8)))
-				mask = chunkJSONStringEscapeMask(chunk)
+				mask = chunkJSONUnsafeMask(chunk)
 				if mask == 0 {
 					scan += 16
 					continue
@@ -34,7 +34,7 @@ func appendEscapedStringContent(lw *lineWriter, s string) {
 		} else if remaining >= 8 {
 			base = scan
 			chunk := *(*uint64)(unsafe.Add(unsafe.Pointer(ptr), uintptr(base)))
-			mask = chunkJSONStringEscapeMask(chunk)
+			mask = chunkJSONUnsafeMask(chunk)
 			if mask == 0 {
 				scan += 8
 				continue
@@ -103,12 +103,6 @@ func appendEscapedChar(lw *lineWriter, c byte, hex string) {
 	case '\t':
 		lw.reserve(2)
 		lw.buf = append(lw.buf, '\\', 't')
-	case '<':
-		lw.reserve(6)
-		lw.buf = append(lw.buf, '\\', 'u', '0', '0', '3', 'c')
-	case '\'':
-		lw.reserve(6)
-		lw.buf = append(lw.buf, '\\', 'u', '0', '0', '2', '7')
 	default:
 		lw.reserve(6)
 		lw.buf = append(lw.buf, '\\', 'u', '0', '0', hex[c>>4], hex[c&0x0f])

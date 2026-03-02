@@ -1,6 +1,6 @@
 module github.com/sa6mwa/pslog/elevatorpitch
 
-go 1.25
+go 1.25.0
 
 replace pkt.systems/pslog => ../
 

@@ -421,6 +421,7 @@ func writeRuntimeJSONFieldsPlainFast(lw *lineWriter, first *bool, keyvals []any)
 	if n == 0 {
 		return true
 	}
+	isFirst := *first
 	pairIndex := 0
 	for i := 0; i+1 < n; i += 2 {
 		var key string
@@ -439,8 +440,8 @@ func writeRuntimeJSONFieldsPlainFast(lw *lineWriter, first *bool, keyvals []any)
 			pairIndex++
 			continue
 		}
-		if *first {
-			*first = false
+		if isFirst {
+			isFirst = false
 		} else {
 			lw.buf = append(lw.buf, ',')
 		}
@@ -463,6 +464,7 @@ func writeRuntimeJSONFieldsPlainFast(lw *lineWriter, first *bool, keyvals []any)
 		}
 		pairIndex++
 	}
+	*first = isFirst
 	if n&1 == 1 {
 		writeRuntimeJSONOddPlain(lw, first, keyvals[n-1], pairIndex)
 	}

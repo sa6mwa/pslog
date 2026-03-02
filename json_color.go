@@ -431,6 +431,7 @@ func writeRuntimeJSONFieldsColorFast(lw *lineWriter, first *bool, keyvals []any,
 	if n == 0 {
 		return true
 	}
+	isFirst := *first
 	pairIndex := 0
 	for i := 0; i+1 < n; i += 2 {
 		var key string
@@ -449,8 +450,8 @@ func writeRuntimeJSONFieldsColorFast(lw *lineWriter, first *bool, keyvals []any,
 			pairIndex++
 			continue
 		}
-		if *first {
-			*first = false
+		if isFirst {
+			isFirst = false
 		} else {
 			lw.writeByte(',')
 		}
@@ -460,6 +461,7 @@ func writeRuntimeJSONFieldsColorFast(lw *lineWriter, first *bool, keyvals []any,
 		writeRuntimeJSONValueColor(lw, value, palette)
 		pairIndex++
 	}
+	*first = isFirst
 	if n&1 == 1 {
 		value := keyvals[n-1]
 		if *first {

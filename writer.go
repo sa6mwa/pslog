@@ -82,13 +82,6 @@ func releaseLineWriter(lw *lineWriter) {
 	} else {
 		lw.buf = lw.buf[:0]
 	}
-	for i := range lw.boolCache {
-		lw.boolCache[i] = literalCacheEntry{}
-	}
-	for i := range lw.stringCache {
-		lw.stringCache[i] = literalCacheEntry{}
-	}
-	lw.nullLiteral = literalCacheEntry{}
 	lw.autoFlush = true
 	lw.lastLen = 0
 	lw.floatPolicy = NonFiniteFloatAsString

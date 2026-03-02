@@ -34,31 +34,31 @@ func TestWritePTJSONStringMatchesEncodingJSON(t *testing.T) {
 	}
 }
 
-func TestWritePTJSONStringEscapesSingleQuote(t *testing.T) {
+func TestWritePTJSONStringLeavesSingleQuoteAndLessThanUnescaped(t *testing.T) {
 	lw := acquireLineWriter(io.Discard)
-	writePTJSONString(lw, "can't")
+	writePTJSONString(lw, "can't <tag>")
 	out := string(lw.buf)
 	releaseLineWriter(lw)
 
-	const want = "\"can\\u0027t\""
+	const want = "\"can't <tag>\""
 	if out != want {
-		t.Fatalf("expected single quote to be escaped: got %q want %q", out, want)
+		t.Fatalf("expected single quote and less-than to stay unescaped: got %q want %q", out, want)
 	}
 }
 
-func TestWritePTJSONStringEscapesSingleQuoteChunkPath(t *testing.T) {
+func TestWritePTJSONStringSingleQuoteChunkPath(t *testing.T) {
 	input := "aaaaaaaa'bbbbbbbbbbbbbbbbbbbbbbbb"
 	out := renderJSONStringForTest(input)
-	want := `"` + strings.ReplaceAll(input, "'", `\u0027`) + `"`
+	want := `"` + input + `"`
 	if out != want {
 		t.Fatalf("single quote chunk path mismatch: got %q want %q", out, want)
 	}
 }
 
-func TestWritePTJSONStringEscapesLessThanChunkPath(t *testing.T) {
+func TestWritePTJSONStringLessThanChunkPath(t *testing.T) {
 	input := "aaaaaaaa<bbbbbbbbbbbbbbbbbbbbbbbb"
 	out := renderJSONStringForTest(input)
-	want := `"` + strings.ReplaceAll(input, "<", `\u003c`) + `"`
+	want := `"` + input + `"`
 	if out != want {
 		t.Fatalf("less-than chunk path mismatch: got %q want %q", out, want)
 	}
@@ -68,10 +68,9 @@ func TestWritePTJSONStringChunkVsTailParity(t *testing.T) {
 	cases := []struct {
 		name string
 		char byte
-		esc  string
 	}{
-		{name: "single_quote", char: '\'', esc: `\u0027`},
-		{name: "less_than", char: '<', esc: `\u003c`},
+		{name: "single_quote", char: '\''},
+		{name: "less_than", char: '<'},
 	}
 
 	const totalLen = 34
@@ -82,11 +81,11 @@ func TestWritePTJSONStringChunkVsTailParity(t *testing.T) {
 				b := bytes.Repeat([]byte{'a'}, totalLen)
 				b[pos] = tc.char
 				out := renderJSONStringForTest(string(b))
-				if strings.ContainsRune(out, rune(tc.char)) {
-					t.Fatalf("raw %q leaked at pos %d in %q", tc.char, pos, out)
+				if strings.Count(out, string(tc.char)) != 1 {
+					t.Fatalf("expected one raw %q at pos %d, got %q", tc.char, pos, out)
 				}
-				if strings.Count(out, tc.esc) != 1 {
-					t.Fatalf("expected one %s escape at pos %d, got %q", tc.esc, pos, out)
+				if strings.Contains(out, `\u0027`) || strings.Contains(out, `\u003c`) {
+					t.Fatalf("unexpected html-style escape at pos %d: %q", pos, out)
 				}
 			}
 		})
